@@ -5,7 +5,7 @@ export function SiteHeader() {
   return (
     <header className={styles.header}>
       <Link to="/" className={styles.wordmark}>
-        Seasonal Emote Replacer
+        7TV Manager
       </Link>
       <nav className={styles.nav} aria-label="Main">
         <a href="/#how">How it works</a>

@@ -44,7 +44,7 @@ Terminology follows `GLOSSARY.md`; the counting rule is recorded in `docs/adr/00
 
 ## Brand Commitments
 
-- Name: **Seasonal Emote Replacer**. Describes itself as a tool *for* 7TV, with a plain "not affiliated with 7TV" note; no 7TV logo or look-alike branding.
+- Name: **7TV Manager**. Describes itself as a tool *for* 7TV, with a plain "not affiliated with 7TV" note; no 7TV logo or look-alike branding.
 - Voice: plain and friendly. Clear and short, a little warm, the occasional Twitch reference. Error messages say what happened and what to do next. Serious steps (tokens, replacing in place) stay strictly clear.
 
 ## Evidence on Hand

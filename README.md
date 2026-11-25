@@ -1,6 +1,6 @@
-# Seasonal Emote Replacer
+# 7TV Manager
 
-Swap the emotes in a 7TV emote set for their seasonal variants (Halloween, Winter) in bulk, and undo it exactly afterwards. The mapping data grows by comparing channels' own normal and seasonal sets. Not affiliated with 7TV.
+Browse and search your 7TV emote sets, duplicate a set, or apply seasonal swaps in bulk with Undo. The mapping data grows by comparing channels' own normal and seasonal sets. Not affiliated with 7TV.
 
 What is being built and why: [the rebuild spec](docs/superpowers/specs/2026-10-27-seasonal-emote-replacer-rebuild.md). Vocabulary: [GLOSSARY.md](GLOSSARY.md).
 

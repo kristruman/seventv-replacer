@@ -8,6 +8,7 @@ import type { MappingRow } from '@shared/types';
 import { fetchPreset, reportBroken } from '../api';
 import { ProblemList } from '../components/ProblemList';
 import { SeasonalAlternatives } from '../components/SeasonalAlternatives';
+import { SetDetails } from '../components/SetDetails';
 import { SetPicker } from '../components/SetPicker';
 import { DeckField } from '../design/DeckField';
 import { GunmetalKey } from '../design/GunmetalKey';
@@ -396,9 +397,9 @@ export function Replace() {
     <div className={ui.shell}>
       <header className={ui.topbar}>
         <div className={ui.topbarInner}>
-          <Link className={ui.brand} to="/" aria-label="Seasonal Emote Replacer home">
+          <Link className={ui.brand} to="/" aria-label="7TV Manager home">
             <span className={ui.brandIcon}><Layers size={19} aria-hidden="true" /></span>
-            Seasonal Emote Replacer
+            7TV Manager
           </Link>
           <nav className={ui.nav} aria-label="Main">
             <Link to="/compare">Compare sets</Link>
@@ -497,7 +498,7 @@ export function Replace() {
           </aside>
 
           <div className={ui.editor}>
-            {set && (
+            {set ? (
               <>
                 <header className={ui.selection}>
                   <span className={ui.selectionIcon}><Layers size={22} aria-hidden="true" /></span>
@@ -510,157 +511,160 @@ export function Replace() {
                   </a>
                 </header>
 
-                <fieldset className={ui.options} disabled={running}>
-                  <legend><SlidersHorizontal size={16} aria-hidden="true" /> Set options</legend>
-                  <div className={ui.selectGrid}>
-                    <label>
-                      Operation
-                      <select value={operation} onChange={(event) => {
-                        setOperation(event.target.value as Operation);
-                        setRunState({ kind: 'idle' });
-                      }}>
-                        {Object.entries(OPERATIONS).map(([value, option]) => (
-                          <option key={value} value={value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    {!copyOnly && (
+                <SetDetails key={set.id} set={set}>
+                  <fieldset className={ui.options} disabled={running}>
+                    <legend><SlidersHorizontal size={16} aria-hidden="true" /> Set options</legend>
+                    <div className={ui.selectGrid}>
                       <label>
-                        Season
-                        <select value={season} onChange={(event) => setSeason(event.target.value as SeasonId)}>
-                          {SEASON_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                        </select>
-                      </label>
-                    )}
-                    {mode === 'duplicate' && (
-                      <label>
-                        Destination
-                        <select value={targetKind} onChange={(event) => {
-                          setTargetKind(event.target.value as 'new' | 'existing');
-                          setTargetError(undefined);
+                        Operation
+                        <select value={operation} onChange={(event) => {
+                          setOperation(event.target.value as Operation);
+                          setRunState({ kind: 'idle' });
                         }}>
-                          <option value="new">New set</option>
-                          <option value="existing">Existing set</option>
+                          {Object.entries(OPERATIONS).map(([value, option]) => (
+                            <option key={value} value={value}>{option.label}</option>
+                          ))}
                         </select>
                       </label>
+                      {!copyOnly && (
+                        <label>
+                          Season
+                          <select value={season} onChange={(event) => setSeason(event.target.value as SeasonId)}>
+                            {SEASON_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select>
+                        </label>
+                      )}
+                      {mode === 'duplicate' && (
+                        <label>
+                          Destination
+                          <select value={targetKind} onChange={(event) => {
+                            setTargetKind(event.target.value as 'new' | 'existing');
+                            setTargetError(undefined);
+                          }}>
+                            <option value="new">New set</option>
+                            <option value="existing">Existing set</option>
+                          </select>
+                        </label>
+                      )}
+                    </div>
+
+                    {mode !== 'duplicate' && (
+                      <p className={ui.callout}>
+                        This edits the source set. Recent runs can be undone from this browser.
+                      </p>
                     )}
-                  </div>
 
-                  {mode !== 'duplicate' && (
-                    <p className={ui.callout}>
-                      This edits the source set. Recent runs can be undone from this browser.
-                    </p>
-                  )}
-
-                  {mode === 'duplicate' && (targetKind === 'new' ? (
-                    <DeckField
-                      label="Name of the new set"
-                      value={copyName}
-                      onChange={(value) => {
-                        setNewName(value);
-                        setTargetError(undefined);
-                      }}
-                      error={targetError}
-                    />
-                  ) : (
-                    <>
-                      <SetPicker
-                        label="Set to fill"
-                        selected={existingTarget}
-                        onSelect={(next) => {
-                          setExistingTarget(next);
+                    {mode === 'duplicate' && (targetKind === 'new' ? (
+                      <DeckField
+                        label="Name of the new set"
+                        value={copyName}
+                        onChange={(value) => {
+                          setNewName(value);
                           setTargetError(undefined);
                         }}
-                        mySets={mySets?.filter((choice) => choice.id !== set.id)}
                         error={targetError}
                       />
-                      {existingTarget && existingTarget.emotes.length > 0 && (
-                        <p className={ui.callout}>
-                          “{existingTarget.name}” already has {plural(existingTarget.emotes.length, 'emote', 'emotes')}. Only new entries will be added.
+                    ) : (
+                      <>
+                        <SetPicker
+                          label="Set to fill"
+                          selected={existingTarget}
+                          onSelect={(next) => {
+                            setExistingTarget(next);
+                            setTargetError(undefined);
+                          }}
+                          mySets={mySets?.filter((choice) => choice.id !== set.id)}
+                          error={targetError}
+                        />
+                        {existingTarget && existingTarget.emotes.length > 0 && (
+                          <p className={ui.callout}>
+                            “{existingTarget.name}” already has {plural(existingTarget.emotes.length, 'emote', 'emotes')}. Only new entries will be added.
+                          </p>
+                        )}
+                      </>
+                    ))}
+                  </fieldset>
+                  <section className={ui.preview} aria-labelledby="preview-heading">
+                    <h2 id="preview-heading">{copyOnly ? 'Copy preview' : 'Swap preview'}</h2>
+                    {copyOnly && (
+                      <p className={ui.previewNote}>
+                        Copy {plural(set.emotes.length, 'emote', 'emotes')} with their current chat names.
+                      </p>
+                    )}
+                    {!copyOnly && preset === 'failed' && (
+                      <p className={ui.callout}>
+                        <strong>The {label} preset didn’t load.</strong> Reload the page to try again.
+                      </p>
+                    )}
+                    {!copyOnly && preset === 'loading' && <p className={ui.previewNote}>Loading the {label} preset…</p>}
+                    {plan && !copyOnly && (
+                      <>
+                        <p className={ui.previewNote}>
+                          {plan.unmapped > 0 &&
+                            (mode === 'revert'
+                              ? `${plural(plan.unmapped, 'emote has', 'emotes have')} no normal version in the ${label} preset. `
+                              : `${plural(plan.unmapped, 'emote has', 'emotes have')} no ${label} version yet. `)}
+                          {plan.alreadyThere > 0 &&
+                            `${plural(plan.alreadyThere, 'swap is', 'swaps are')} left out because the other version is already in the set. `}
+                          {mode === 'duplicate' && plan.swaps.length > 0 && 'Unselected emotes are copied as-is.'}
                         </p>
-                      )}
-                    </>
-                  ))}
-                </fieldset>
+                        {plan.swaps.length > 0 ? (
+                          <SwapList
+                            workspace
+                            label="Swaps"
+                            items={plan.swaps.map((s) => ({ key: swapKey(s.fromId, s.alias), alias: s.alias, fromId: s.fromId, toId: s.toId }))}
+                            unticked={unticked}
+                            onChange={setUnticked}
+                          />
+                        ) : (
+                          <p className={ui.callout}>
+                            <strong>Nothing to swap in this set.</strong>{' '}
+                            {mode === 'revert'
+                              ? `None of its emotes are ${label} versions the preset knows.`
+                              : `None of its emotes have a ${label} version in the preset yet.`}
+                          </p>
+                        )}
+                      </>
+                    )}
+                    {plan && mode === 'duplicate' && !copyOnly && !running && set.emotes.length > 0 && (
+                      <SeasonalAlternatives
+                        key={`${set.id}:${season}`}
+                        emotes={set.emotes}
+                        season={season}
+                        saved={personal}
+                        swaps={plan.swaps}
+                        onChoose={(originalId, replacementId) => {
+                          savePersonalMapping(season, originalId, replacementId);
+                          setPersonalEdits((current) => ({
+                            ...current,
+                            [season]: { ...current[season], [originalId]: replacementId },
+                          }));
+                          setUnticked((current) => {
+                            const next = new Set(current);
+                            for (const emote of set.emotes) {
+                              if (emote.id === originalId) next.delete(swapKey(emote.id, emote.alias));
+                            }
+                            return next;
+                          });
+                        }}
+                      />
+                    )}
+                  </section>
+
+                  <section className={ui.runBar} aria-label="Run">
+                    <span role="status" className={ui.runStatus}>{readout}</span>
+                    <button type="button" className={ui.primaryButton} disabled={running || !plan} onClick={() => void run()}>
+                      {running ? (mode === 'duplicate' ? 'Copying…' : 'Applying…') : OPERATIONS[operation].action}
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </button>
+                  </section>
+                </SetDetails>
               </>
-            )}
-
-            <section className={set ? ui.preview : ui.emptyPreview} aria-labelledby="preview-heading">
-              {!set && <span className={ui.emptyIcon}><Layers size={30} strokeWidth={1.5} aria-hidden="true" /></span>}
-              <h2 id="preview-heading">{set ? (copyOnly ? 'Copy preview' : 'Swap preview') : 'Choose a source set'}</h2>
-              {!set && <p>Select one of your sets or paste a link to preview a copy or seasonal swaps.</p>}
-              {set && copyOnly && (
-                <p className={ui.previewNote}>
-                  Copy {plural(set.emotes.length, 'emote', 'emotes')} with their current chat names.
-                </p>
-              )}
-              {set && !copyOnly && preset === 'failed' && (
-                <p className={ui.callout}>
-                  <strong>The {label} preset didn’t load.</strong> Reload the page to try again.
-                </p>
-              )}
-              {set && !copyOnly && preset === 'loading' && <p className={ui.previewNote}>Loading the {label} preset…</p>}
-              {plan && !copyOnly && (
-                <>
-                  <p className={ui.previewNote}>
-                    {plan.unmapped > 0 &&
-                      (mode === 'revert'
-                        ? `${plural(plan.unmapped, 'emote has', 'emotes have')} no normal version in the ${label} preset. `
-                        : `${plural(plan.unmapped, 'emote has', 'emotes have')} no ${label} version yet. `)}
-                    {plan.alreadyThere > 0 &&
-                      `${plural(plan.alreadyThere, 'swap is', 'swaps are')} left out because the other version is already in the set. `}
-                    {mode === 'duplicate' && plan.swaps.length > 0 && 'Unselected emotes are copied as-is.'}
-                  </p>
-                  {plan.swaps.length > 0 ? (
-                    <SwapList
-                      workspace
-                      label="Swaps"
-                      items={plan.swaps.map((s) => ({ key: swapKey(s.fromId, s.alias), alias: s.alias, fromId: s.fromId, toId: s.toId }))}
-                      unticked={unticked}
-                      onChange={setUnticked}
-                    />
-                  ) : (
-                    <p className={ui.callout}>
-                      <strong>Nothing to swap in this set.</strong>{' '}
-                      {mode === 'revert'
-                        ? `None of its emotes are ${label} versions the preset knows.`
-                        : `None of its emotes have a ${label} version in the preset yet.`}
-                    </p>
-                  )}
-                </>
-              )}
-              {set && plan && mode === 'duplicate' && !copyOnly && !running && set.emotes.length > 0 && (
-                <SeasonalAlternatives
-                  key={`${set.id}:${season}`}
-                  emotes={set.emotes}
-                  season={season}
-                  saved={personal}
-                  swaps={plan.swaps}
-                  onChoose={(originalId, replacementId) => {
-                    savePersonalMapping(season, originalId, replacementId);
-                    setPersonalEdits((current) => ({
-                      ...current,
-                      [season]: { ...current[season], [originalId]: replacementId },
-                    }));
-                    setUnticked((current) => {
-                      const next = new Set(current);
-                      for (const emote of set.emotes) {
-                        if (emote.id === originalId) next.delete(swapKey(emote.id, emote.alias));
-                      }
-                      return next;
-                    });
-                  }}
-                />
-              )}
-            </section>
-
-            {set && (
-              <section className={ui.runBar} aria-label="Run">
-                <span role="status" className={ui.runStatus}>{readout}</span>
-                <button type="button" className={ui.primaryButton} disabled={running || !plan} onClick={() => void run()}>
-                  {running ? (mode === 'duplicate' ? 'Copying…' : 'Applying…') : OPERATIONS[operation].action}
-                  <ArrowRight size={16} aria-hidden="true" />
-                </button>
+            ) : (
+              <section className={ui.emptyPreview} aria-labelledby="preview-heading">
+                <span className={ui.emptyIcon}><Layers size={30} strokeWidth={1.5} aria-hidden="true" /></span>
+                <h2 id="preview-heading">Choose a source set</h2>
+                <p>Select one of your sets or paste a link to view its emotes.</p>
               </section>
             )}
           </div>

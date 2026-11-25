@@ -4,7 +4,7 @@ import styles from './SiteFooter.module.css';
 export function SiteFooter() {
   return (
     <footer className={styles.footer}>
-      <p className={styles.name}>Seasonal Emote Replacer</p>
+      <p className={styles.name}>7TV Manager</p>
       <nav className={styles.links} aria-label="Footer">
         <Link to="/">Home</Link>
         <Link to="/guide/token">Token guide</Link>

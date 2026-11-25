@@ -1,5 +1,5 @@
 ---
-name: Seasonal Emote Replacer
+name: 7TV Manager
 description: Stream Desk Deck. A gunmetal desk instrument where the emotes are the keys, the season is a knob, and one orange key commits.
 colors:
   orange: "#ff5f1f"
@@ -184,7 +184,7 @@ components:
     padding: "18px 22px"
 ---
 
-# Design System: Seasonal Emote Replacer
+# Design System: 7TV Manager
 
 ## Overview
 

@@ -8,6 +8,7 @@ interface KeycapProps {
   /** Omitted for a blank cap (loading, or nothing to show). */
   emoteId?: string;
   alt: string;
+  caption?: string;
   legend?: string;
   state?: KeycapState;
   pressed?: boolean;
@@ -18,7 +19,7 @@ interface KeycapProps {
  * One emote printed on a PBT keycap. Hovering magnifies the art; clicking opens the emote on 7TV in a new tab.
  * A cap with an empty `alt` is decorative: still clickable, but kept out of the tab order and the accessibility tree.
  */
-export function Keycap({ emoteId, alt, legend, state = 'idle', pressed = false, tone = 'bone' }: KeycapProps) {
+export function Keycap({ emoteId, alt, caption, legend, state = 'idle', pressed = false, tone = 'bone' }: KeycapProps) {
   const [failedFor, setFailedFor] = useState<string | null>(null);
   const shared = { className: styles.key, 'data-state': state, 'data-pressed': pressed || undefined, 'data-tone': tone };
   const legendText = legend && (
@@ -49,6 +50,7 @@ export function Keycap({ emoteId, alt, legend, state = 'idle', pressed = false, 
         decoding="async"
         onError={() => setFailedFor(emoteId)}
       />
+      {caption && <span title={caption}>{caption}</span>}
       {legendText}
     </a>
   );

@@ -54,7 +54,7 @@ a.key:focus-visible {
 
 a.key:hover .art,
 a.key:focus-visible .art {
-  transform: scale(2);
+  transform: scale(var(--key-hover-scale, 2));
   filter: drop-shadow(0 4px 6px rgb(0 0 0 / 0.35));
 }
 
