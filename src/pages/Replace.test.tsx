@@ -69,6 +69,64 @@ describe('Replace', () => {
     expect(screen.getByLabelText('Name of the new set')).toHaveValue('Main (Winter)');
   });
 
+  it('copies the original emotes and aliases even when the seasonal preset is unavailable', async () => {
+    mockFetch({
+      ...sevenTvRead(sets, (change) => void mutations.push(change)),
+      '/api/presets/': () => json({}, 503),
+    });
+    localStorage.setItem('ser.7tv-token', 'tok');
+    renderAt('/replace?channel=niena&season=winter');
+    await userEvent.click(await screen.findByRole('button', { name: /Main/ }));
+    await screen.findByText(/Winter preset didn’t load/);
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Copy only' }));
+    expect(screen.getByLabelText('Name of the new set')).toHaveValue('Main (Copy)');
+    await userEvent.click(screen.getByRole('button', { name: 'Copy set' }));
+    expect(await screen.findByText(/3 emotes copied to “Main \(Copy\)”/)).toBeInTheDocument();
+    expect(mutations).toEqual([
+      { id: 'NEW', action: 'ADD', emote_id: A, name: 'peepoHappy' },
+      { id: 'NEW', action: 'ADD', emote_id: B, name: 'Sadge' },
+      { id: 'NEW', action: 'ADD', emote_id: X, name: 'KEKW' },
+    ]);
+  });
+
+  it('only swaps a search result after selection and remembers it for the same season', async () => {
+    const winterKekw = emoteId(4, 'Z');
+    const read = sevenTvRead(sets, (change) => void mutations.push(change));
+    mockFetch({
+      ...read,
+      'https://7tv.io/v4/gql': (url, init) => {
+        const body = JSON.parse(String(init?.body));
+        if (!body.query?.includes('SeasonalEmotes')) return read['https://7tv.io/v4/gql'](url, init);
+        expect(body.variables).toMatchObject({ name: 'KEKW', tags: expect.arrayContaining(['Christmas']) });
+        expect(new Headers(init?.headers).has('Authorization')).toBe(false);
+        return json({ data: { emotes: { search: {
+          items: [{ id: winterKekw, defaultName: 'SantaKEKW', owner: null }],
+        } } } });
+      },
+      '/api/presets/': (url) => preset(url.split('/').pop()!),
+    });
+
+    localStorage.setItem('ser.7tv-token', 'tok');
+    const page = renderAt('/replace?channel=niena&season=winter');
+    await pickMain();
+    await userEvent.click(screen.getByText('Find a Winter alternative'));
+    await userEvent.selectOptions(screen.getByLabelText('Emote to replace'), X);
+    await userEvent.click(screen.getByRole('button', { name: 'Search 7TV' }));
+    const useCandidate = await screen.findByRole('button', { name: 'Use SantaKEKW' });
+    expect(screen.queryByRole('checkbox', { name: 'KEKW' })).not.toBeInTheDocument();
+    await userEvent.click(useCandidate);
+    expect(screen.getByRole('checkbox', { name: 'KEKW' })).toBeChecked();
+    expect(mutations).toEqual([]);
+    page.unmount();
+
+    renderAt('/replace?channel=niena&season=winter');
+    await pickMain();
+    expect(screen.getByRole('checkbox', { name: 'KEKW' })).toBeChecked();
+    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await screen.findByRole('heading', { name: 'Run finished' });
+    expect(mutations).toContainEqual({ id: 'NEW', action: 'ADD', emote_id: winterKekw, name: 'KEKW' });
+  });
+
   it('warns before replacing in place', async () => {
     renderAt('/replace?season=halloween');
     await userEvent.click(screen.getByRole('radio', { name: 'In place' }));

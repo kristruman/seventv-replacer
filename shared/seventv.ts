@@ -2,6 +2,8 @@
  * Read-only 7TV access, shared by the browser (Replace, the set picker) and
  * the Worker (Compare fetches both sets itself). Nothing here needs a token.
  */
+import type { SeasonId } from './seasons';
+
 export const SEVENTV_API = 'https://7tv.io';
 const IVR_API = 'https://api.ivr.fi';
 
@@ -9,6 +11,7 @@ const IVR_API = 'https://api.ivr.fi';
 export interface SetEmote {
   id: string;
   alias: string;
+  defaultName?: string;
 }
 
 export interface SetOwner {
@@ -103,7 +106,7 @@ interface V3SetBody {
   name: string;
   capacity?: number;
   owner?: { id: string; username?: string; display_name?: string } | null;
-  emotes?: Array<{ id: string; name: string }> | null;
+  emotes?: Array<{ id: string; name: string; data?: { name?: string } | null }> | null;
 }
 
 export async function fetchEmoteSet(id: string, fetchFn: Fetch = fetch): Promise<EmoteSet> {
@@ -120,13 +123,58 @@ export async function fetchEmoteSet(id: string, fetchFn: Fetch = fetch): Promise
     name: set.name,
     capacity: typeof set.capacity === 'number' ? set.capacity : null,
     owner: set.owner ? { id: set.owner.id, name: set.owner.display_name || set.owner.username || set.owner.id } : null,
-    emotes: (set.emotes ?? []).map((e) => ({ id: e.id, alias: e.name })),
+    emotes: (set.emotes ?? []).map((e) => ({
+      id: e.id,
+      alias: e.name,
+      ...(e.data?.name ? { defaultName: e.data.name } : {}),
+    })),
   };
 }
 
 interface GqlBody<T> {
   data?: T;
   errors?: Array<{ message: string }>;
+}
+
+export interface SeasonalCandidate {
+  id: string;
+  defaultName: string;
+  owner: { mainConnection: { platformDisplayName: string } | null } | null;
+}
+
+const SEASON_TAGS: Record<SeasonId, string[]> = {
+  halloween: ['Halloween', 'Spooky'],
+  winter: ['Christmas', 'Winter', 'Xmas', 'Santa', 'Navidad'],
+};
+
+/** Find artwork to review. Search results never become mappings until the user picks one. */
+export async function searchSeasonalEmotes(
+  name: string,
+  season: SeasonId,
+  signal: AbortSignal,
+  fetchFn: Fetch = fetch,
+): Promise<SeasonalCandidate[]> {
+  const query = `
+    query SeasonalEmotes($name: String!, $tags: [String!]!) {
+      emotes {
+        search(query: $name, tags: {tags: $tags, match: ANY}, page: 1, perPage: 16,
+          sort: {sortBy: TOP_ALL_TIME, order: DESCENDING}) {
+          items { id defaultName owner { mainConnection { platformDisplayName } } }
+        }
+      }
+    }`;
+  const { status, body } = await readJson(fetchFn, `${SEVENTV_API}/v4/gql`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables: { name, tags: SEASON_TAGS[season] } }),
+    signal,
+  });
+  const response = body as GqlBody<{ emotes: { search: { items: SeasonalCandidate[] } } }> | null;
+  const candidates = response?.data?.emotes?.search?.items;
+  if (status !== 200 || response?.errors?.length || !Array.isArray(candidates)) {
+    throw new SevenTvError('7TV couldn’t search for seasonal emotes. Try again in a moment.', 'unavailable');
+  }
+  return candidates;
 }
 
 /** Every set a channel's 7TV account owns, its active set first. */

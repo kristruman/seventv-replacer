@@ -156,8 +156,21 @@
   max-width: 40rem;
 }
 
-.target > :first-child {
+.target > div {
   justify-self: stretch;
+}
+
+.copyOnly {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.copyOnly input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--orange);
 }
 
 .textButton {

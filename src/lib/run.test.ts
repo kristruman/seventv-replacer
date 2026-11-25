@@ -237,6 +237,29 @@ describe('replace in place, then undo', () => {
 });
 
 describe('duplicate + replace', () => {
+  it('only replaces the alias listed in the preview when two entries share an emote ID', async () => {
+    const set = source([['a', 'A'], ['same-art', 'A']]);
+    const tv = fakeSevenTv({ S: set.emotes });
+    await executeRun(
+      { mode: 'duplicate', season: 'halloween', source: set, swaps: planSwaps(set, MAPPINGS, 'duplicate').swaps },
+      tv.writer,
+      quick,
+    );
+    expect(tv.store.get('NEW1')).toEqual([{ id: 'A2', alias: 'a' }, { id: 'A', alias: 'same-art' }]);
+  });
+
+  it('rejects using the source as the destination before writing emotes', async () => {
+    const set = source([['a', 'A']]);
+    const tv = fakeSevenTv({ S: set.emotes });
+    const run = executeRun(
+      { mode: 'duplicate', season: 'halloween', source: set, swaps: [], target: { kind: 'existing', set } },
+      tv.writer,
+      quick,
+    );
+    await expect(run).rejects.toMatchObject({ kind: 'same-set' });
+    expect(tv.store.get('S')).toEqual(set.emotes);
+  });
+
   it('fills a new set with the seasonal versions, and undo deletes it', async () => {
     const set = source([['a', 'A'], ['x', 'X']]);
     const tv = fakeSevenTv({ S: set.emotes });

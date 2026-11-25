@@ -12,6 +12,8 @@ export interface PlannedSwap {
   toId: string;
 }
 
+export const swapKey = (id: string, alias: string) => JSON.stringify([id, alias]);
+
 export interface SwapPlan {
   swaps: PlannedSwap[];
   /** Emotes the preset has no other version of. */
@@ -48,6 +50,7 @@ export interface RunRecord {
   at: string;
   mode: RunMode;
   season: SeasonId;
+  copyOnly?: boolean;
   /** The set the run changed: the source itself, or the copy it filled. */
   setId: string;
   setName: string;
@@ -104,6 +107,7 @@ export type DuplicateTarget = { kind: 'new'; name: string } | { kind: 'existing'
 export interface RunInput {
   mode: RunMode;
   season: SeasonId;
+  copyOnly?: boolean;
   source: EmoteSet;
   /** The ticked swaps only. */
   swaps: PlannedSwap[];
@@ -131,7 +135,7 @@ export interface RunOptions {
 export class RunNotStarted extends Error {
   constructor(
     message: string,
-    readonly kind: 'create-refused' | 'auth' | 'no-owner',
+    readonly kind: 'create-refused' | 'auth' | 'no-owner' | 'same-set',
   ) {
     super(message);
     this.name = 'RunNotStarted';
@@ -170,6 +174,7 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
     at: now().toISOString(),
     mode: input.mode,
     season: input.season,
+    ...(input.copyOnly ? { copyOnly: true } : {}),
     setId: input.source.id,
     setName: input.source.name,
     createdSet: false,
@@ -290,6 +295,9 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
 
   const target = input.target ?? { kind: 'new', name: input.source.name };
   if (target.kind === 'existing') {
+    if (target.set.id === input.source.id) {
+      throw new RunNotStarted('Choose a different destination. The copy can’t go into its own source set.', 'same-set');
+    }
     record.setId = target.set.id;
     record.setName = target.set.name;
   } else {
@@ -310,7 +318,7 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
     await pause();
   }
 
-  const swapFor = new Map(input.swaps.map((s) => [s.fromId, s]));
+  const swapFor = new Map(input.copyOnly ? [] : input.swaps.map((s) => [swapKey(s.fromId, s.alias), s]));
   const total = input.source.emotes.length;
   const keep = (id: string, alias: string) => {
     // A created set is undone by deleting it; only an existing target needs the list.
@@ -323,7 +331,7 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
     try {
       results = await writer.addEmotes(
         record.setId,
-        chunk.map((e) => ({ emoteId: swapFor.get(e.id)?.toId ?? e.id, alias: e.alias })),
+        chunk.map((e) => ({ emoteId: swapFor.get(swapKey(e.id, e.alias))?.toId ?? e.id, alias: e.alias })),
       );
     } catch (error) {
       if (isAuth(error)) {
@@ -334,7 +342,7 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
     }
 
     for (const [i, emote] of chunk.entries()) {
-      const swap = swapFor.get(emote.id);
+      const swap = swapFor.get(swapKey(emote.id, emote.alias));
       const result = results[i]!;
       if (result.ok) {
         keep(swap?.toId ?? emote.id, emote.alias);

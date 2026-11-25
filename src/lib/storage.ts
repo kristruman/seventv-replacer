@@ -1,3 +1,6 @@
+import { isEmoteId } from '@shared/seventv';
+import type { SeasonId } from '@shared/seasons';
+import type { MappingRow } from '@shared/types';
 import type { RunProblem, RunRecord } from './run';
 
 /**
@@ -37,6 +40,19 @@ export function cleanToken(pasted: string): string {
 
 export const loadToken = () => read(TOKEN_KEY) ?? '';
 export const saveToken = (token: string) => write(TOKEN_KEY, token || null);
+
+const mappingKey = (season: SeasonId, id: string) => `ser.personal.${season}.${id}`;
+
+export function loadPersonalMappings(season: SeasonId, emoteIds: string[]): MappingRow[] {
+  return emoteIds.flatMap((originalId) => {
+    const replacementId = read(mappingKey(season, originalId));
+    return replacementId && isEmoteId(replacementId) ? [{ originalId, replacementId }] : [];
+  });
+}
+
+export function savePersonalMapping(season: SeasonId, originalId: string, replacementId: string | null) {
+  write(mappingKey(season, originalId), replacementId);
+}
 
 export function loadRuns(): RunRecord[] {
   try {

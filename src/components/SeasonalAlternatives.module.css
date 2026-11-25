@@ -1,0 +1,70 @@
+.panel {
+  width: min(100%, 42rem);
+  padding: 16px 20px;
+  border: 1px solid var(--mat-line);
+  border-radius: 12px;
+}
+
+.panel summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.picker {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+  max-width: 24rem;
+}
+
+.picker select {
+  min-height: 42px;
+  padding: 6px 10px;
+  color: var(--charcoal);
+  background: var(--bone);
+  border: 1px solid var(--bone-wall);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.original,
+.search,
+.results li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.search {
+  align-items: end;
+}
+
+.search > :first-child {
+  flex: 1 1 15rem;
+}
+
+.results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.results li {
+  border-top: 1px solid var(--mat-line);
+  padding-top: 12px;
+}
+
+.results li > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.results small {
+  display: block;
+}
+
+.status:empty {
+  display: none;
+}

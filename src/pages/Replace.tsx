@@ -6,6 +6,7 @@ import { fetchEmoteSet, seventvSetUrl, type EmoteSet } from '@shared/seventv';
 import type { MappingRow } from '@shared/types';
 import { fetchPreset, reportBroken } from '../api';
 import { ProblemList } from '../components/ProblemList';
+import { SeasonalAlternatives } from '../components/SeasonalAlternatives';
 import { SetPicker } from '../components/SetPicker';
 import { ActionKey } from '../design/ActionKey';
 import { AmberScreen } from '../design/AmberScreen';
@@ -17,7 +18,7 @@ import { SiteFooter } from '../design/SiteFooter';
 import { SiteHeader } from '../design/SiteHeader';
 import { SwapList } from '../design/SwapList';
 import { fixProblem, recordFix } from '../lib/problems';
-import { executeRun, planSwaps, type RunMode, type RunProblem, type RunRecord, type RunReport } from '../lib/run';
+import { executeRun, planSwaps, swapKey, type RunMode, type RunProblem, type RunRecord, type RunReport } from '../lib/run';
 import { createWriter, type SetWriter } from '../lib/seventv-write';
 import {
   cleanToken,
@@ -25,10 +26,12 @@ import {
   forgetRun,
   forgetRunProblems,
   loadProblems,
+  loadPersonalMappings,
   loadRuns,
   loadToken,
   rememberRun,
   saveToken,
+  savePersonalMapping,
   updateProblems,
   updateRun,
 } from '../lib/storage';
@@ -95,6 +98,8 @@ export function Replace() {
 
   const [season, setSeason] = useState<SeasonId>(() => (isSeasonId(seasonParam) ? seasonParam : currentSeason(new Date())));
   const [mode, setMode] = useState<RunMode>('duplicate');
+  const [skipSwaps, setSkipSwaps] = useState(false);
+  const [personalEdits, setPersonalEdits] = useState<Partial<Record<SeasonId, Record<string, string | null>>>>({});
   const [presets, setPresets] = useState<Partial<Record<SeasonId, Loaded<MappingRow[]>>>>({});
   const [unticked, setUnticked] = useState<Set<string>>(() => new Set());
 
@@ -122,18 +127,19 @@ export function Replace() {
   const label = seasonLabel(season);
   const running = runState.kind === 'running';
   const preset = presets[season];
+  const copyOnly = mode === 'duplicate' && skipSwaps;
 
   useEffect(() => {
-    if (preset !== undefined) return;
+    if (copyOnly || preset !== undefined) return;
     setPresets((p) => ({ ...p, [season]: 'loading' }));
     fetchPreset(season).then(
       (body) => setPresets((p) => ({ ...p, [season]: body.mappings })),
       () => setPresets((p) => ({ ...p, [season]: 'failed' })),
     );
-  }, [season, preset]);
+  }, [season, preset, copyOnly]);
 
   // A new set, season or mode is a new preview: everything starts ticked again.
-  useEffect(() => setUnticked(new Set()), [set?.id, season, mode]);
+  useEffect(() => setUnticked(new Set()), [set?.id, season, mode, copyOnly]);
 
   // The run lives in this tab: closing it stops the run half-way (Undo still has what was done).
   useEffect(() => {
@@ -143,20 +149,41 @@ export function Replace() {
     return () => window.removeEventListener('beforeunload', warn);
   }, [running]);
 
-  const plan = useMemo(
-    () => (set && Array.isArray(preset) ? planSwaps(set, preset, mode) : null),
-    [set, preset, mode],
-  );
-  const ticked = plan ? plan.swaps.filter((s) => !unticked.has(s.fromId)) : [];
-  const copyName = newName ?? (set ? `${set.name} (${label})` : '');
+  const personal = useMemo(() => {
+    const ids = [...new Set(set?.emotes.map((emote) => emote.id))];
+    const saved = loadPersonalMappings(season, ids);
+    const mappings = new Map(saved.map(({ originalId, replacementId }) => [originalId, replacementId]));
+    for (const [id, replacement] of Object.entries(personalEdits[season] ?? {})) {
+      if (replacement === null) mappings.delete(id);
+      else mappings.set(id, replacement);
+    }
+    return mappings;
+  }, [set, season, personalEdits]);
+  const plan = useMemo(() => {
+    if (!set) return null;
+    if (copyOnly) return { swaps: [], unmapped: 0, alreadyThere: 0 };
+    if (!Array.isArray(preset)) return null;
+    const mappings = mode !== 'duplicate' ? preset : [
+      ...preset,
+      ...Array.from(personal, ([originalId, replacementId]) => ({ originalId, replacementId })),
+    ];
+    return planSwaps(set, mappings, mode);
+  }, [set, preset, mode, copyOnly, personal]);
+  const ticked = plan ? plan.swaps.filter((s) => !unticked.has(swapKey(s.fromId, s.alias))) : [];
+  const copyName = newName ?? (set ? `${set.name} (${copyOnly ? 'Copy' : label})` : '');
 
   const readout = (() => {
     if (runState.kind === 'running') {
       const progress = `${mode === 'duplicate' ? 'Copying' : 'Swapping'} · ${runState.done}/${runState.total}`;
       return runState.msLeft === undefined ? progress : `${progress} · ${timeLeft(runState.msLeft)}`;
     }
-    if (runState.kind === 'done') return `Done · ${runState.report.swapped} swapped`;
+    if (runState.kind === 'done') {
+      return runState.report.record.copyOnly
+        ? `Done · ${runState.report.copied} copied`
+        : `Done · ${runState.report.swapped} swapped`;
+    }
     if (!set) return 'Pick a set';
+    if (copyOnly) return `Copy · ${plural(set.emotes.length, 'emote', 'emotes')}`;
     if (preset === 'failed') return 'Preset unavailable';
     if (!plan) return `Loading ${label}`;
     return `${mode === 'revert' ? 'Revert' : label} · ${plural(ticked.length, 'swap', 'swaps')}`;
@@ -212,7 +239,9 @@ export function Replace() {
       if (activeRun.current) activeRun.current.id = problem.runId;
       setProblems(updateProblems((list) => [...list, problem]));
       setNotice(`${problem.alias} was set aside. The run carries on.`);
-      if (problem.kind === 'broken' && problem.pairing) {
+      if (problem.kind === 'broken' && problem.pairing && Array.isArray(preset) &&
+        preset.some((mapping) => mapping.originalId === problem.pairing?.originalId &&
+          mapping.replacementId === problem.pairing?.replacementId)) {
         reportBroken({ season: problem.season, ...problem.pairing, brokenId: problem.emoteId, reason: problem.reason }).catch(
           () => {},
         );
@@ -232,6 +261,7 @@ export function Replace() {
         {
           mode,
           season,
+          copyOnly,
           source,
           swaps: ticked,
           target:
@@ -328,7 +358,7 @@ export function Replace() {
       <SiteHeader />
       <main className={styles.main}>
         <div className={styles.intro}>
-          <h1 className={styles.heading}>Make your set seasonal</h1>
+          <h1 className={styles.heading}>Duplicate or replace emotes</h1>
           <p className={styles.lede}>
             Pick a set, turn the knobs, check the swaps, press the orange key. Nothing changes on 7TV until you do.
           </p>
@@ -401,7 +431,8 @@ export function Replace() {
               <Knob<RunMode> label="Mode" options={MODE_OPTIONS} value={mode} onChange={setMode} />
             </div>
             <p className={styles.consoleNote}>
-              <strong>{MODE_NAMES[mode]}.</strong> {modeDescription(mode, label)}
+              <strong>{copyOnly ? 'Copy only' : MODE_NAMES[mode]}.</strong>{' '}
+              {copyOnly ? 'Copies the source emotes with their chat names.' : modeDescription(mode, label)}
             </p>
           </div>
 
@@ -414,6 +445,18 @@ export function Replace() {
 
           {mode === 'duplicate' && (
             <div className={styles.target}>
+              <label className={styles.copyOnly}>
+                <input
+                  type="checkbox"
+                  checked={copyOnly}
+                  disabled={running}
+                  onChange={(event) => {
+                    setSkipSwaps(event.target.checked);
+                    if (runState.kind !== 'idle') setRunState({ kind: 'idle' });
+                  }}
+                />
+                Copy only
+              </label>
               {targetKind === 'new' ? (
                 <>
                   <DeckField
@@ -462,16 +505,21 @@ export function Replace() {
             <span className={styles.stepNumber} aria-hidden="true">
               4
             </span>
-            Check the swaps
+            {copyOnly ? 'Check the copy' : 'Check the swaps'}
           </h2>
           {!set && <p className={styles.stepLede}>Pick a set above to see every swap before anything changes.</p>}
-          {set && preset === 'failed' && (
+          {set && copyOnly && (
+            <p className={styles.stepLede}>
+              Copy {plural(set.emotes.length, 'emote', 'emotes')} with their current chat names.
+            </p>
+          )}
+          {set && !copyOnly && preset === 'failed' && (
             <p className={styles.plate}>
               <strong>The {label} preset didn’t load.</strong> Reload the page to try again.
             </p>
           )}
-          {set && preset === 'loading' && <p className={styles.stepLede}>Loading the {label} preset…</p>}
-          {plan && (
+          {set && !copyOnly && preset === 'loading' && <p className={styles.stepLede}>Loading the {label} preset…</p>}
+          {plan && !copyOnly && (
             <>
               <p className={styles.stepLede}>
                 {plan.unmapped > 0 &&
@@ -485,7 +533,7 @@ export function Replace() {
               {plan.swaps.length > 0 ? (
                 <SwapList
                   label="Swaps"
-                  items={plan.swaps.map((s) => ({ key: s.fromId, alias: s.alias, fromId: s.fromId, toId: s.toId }))}
+                  items={plan.swaps.map((s) => ({ key: swapKey(s.fromId, s.alias), alias: s.alias, fromId: s.fromId, toId: s.toId }))}
                   unticked={unticked}
                   onChange={setUnticked}
                 />
@@ -499,6 +547,29 @@ export function Replace() {
               )}
             </>
           )}
+          {set && plan && mode === 'duplicate' && !copyOnly && !running && set.emotes.length > 0 && (
+            <SeasonalAlternatives
+              key={`${set.id}:${season}`}
+              emotes={set.emotes}
+              season={season}
+              saved={personal}
+              swaps={plan.swaps}
+              onChoose={(originalId, replacementId) => {
+                savePersonalMapping(season, originalId, replacementId);
+                setPersonalEdits((current) => ({
+                  ...current,
+                  [season]: { ...current[season], [originalId]: replacementId },
+                }));
+                setUnticked((current) => {
+                  const next = new Set(current);
+                  for (const emote of set.emotes) {
+                    if (emote.id === originalId) next.delete(swapKey(emote.id, emote.alias));
+                  }
+                  return next;
+                });
+              }}
+            />
+          )}
         </section>
 
         <section className={styles.runBar} aria-label="Run">
@@ -506,7 +577,7 @@ export function Replace() {
             {readout}
           </AmberScreen>
           <ActionKey className={styles.runKey} onClick={() => void run()} busy={running}>
-            {mode === 'revert' ? 'Revert' : 'Make seasonal'}
+            {copyOnly ? 'Copy set' : mode === 'revert' ? 'Revert' : 'Make seasonal'}
           </ActionKey>
         </section>
 
@@ -537,7 +608,7 @@ export function Replace() {
                   <div className={styles.runText}>
                     <p className={styles.runName}>{record.setName}</p>
                     <p className={styles.runMeta}>
-                      {MODE_NAMES[record.mode]} · {seasonLabel(record.season)} · {when(record.at)}
+                      {record.copyOnly ? 'Copy only' : `${MODE_NAMES[record.mode]} · ${seasonLabel(record.season)}`} · {when(record.at)}
                     </p>
                   </div>
                   <GunmetalKey size="small" busy={running || undoing === record.id} onClick={() => void undo(record)}>
@@ -568,7 +639,9 @@ function RunSummary({ report }: { report: RunReport }) {
         </p>
       )}
       <p className={styles.stepLede}>
-        {record.mode === 'duplicate'
+        {record.copyOnly
+          ? `${plural(report.copied, 'emote', 'emotes')} copied to “${record.setName}”.`
+          : record.mode === 'duplicate'
           ? `“${record.setName}” now has ${plural(report.swapped, 'seasonal emote', 'seasonal emotes')}${
               report.copied ? ` and ${report.copied} unchanged` : ''
             }. Switch to it on 7TV when you go live.`
@@ -588,7 +661,7 @@ function RunSummary({ report }: { report: RunReport }) {
       )}
       {report.failed.length > 0 && (
         <div className={styles.listBlock}>
-          <p className={styles.listHeading}>{plural(report.failed.length, 'emote', 'emotes')} not swapped</p>
+          <p className={styles.listHeading}>{plural(report.failed.length, 'emote', 'emotes')} {record.copyOnly ? 'not copied' : 'not swapped'}</p>
           <ul className={styles.facts}>
             {report.failed.map((f, i) => (
               <li key={`${f.alias}-${i}`}>

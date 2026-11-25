@@ -37,7 +37,7 @@ describe('fetchEmoteSet', () => {
       name: 'Main',
       capacity: 1000,
       owner: { id: 'U1', name: 'Niena' },
-      emotes: [{ id: 'E1', alias: 'peepoHappy' }],
+      emotes: [{ id: 'E1', alias: 'peepoHappy', defaultName: 'peepoHappy' }],
     });
   });
 
