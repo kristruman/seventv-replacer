@@ -12,6 +12,12 @@ export interface SetEmote {
   id: string;
   alias: string;
   defaultName?: string;
+  flags?: SetEmoteFlags;
+}
+
+export interface SetEmoteFlags {
+  zeroWidth: boolean;
+  overrideConflicts: boolean;
 }
 
 export interface SetOwner {
@@ -106,11 +112,13 @@ interface V3SetBody {
   name: string;
   capacity?: number;
   owner?: { id: string; username?: string; display_name?: string } | null;
-  emotes?: Array<{ id: string; name: string; data?: { name?: string } | null }> | null;
+  emotes?: Array<{ id: string; name: string; flags?: number; data?: { name?: string } | null }> | null;
 }
 
 export async function fetchEmoteSet(id: string, fetchFn: Fetch = fetch): Promise<EmoteSet> {
-  const { status, body } = await readJson(fetchFn, `${SEVENTV_API}/v3/emote-sets/${encodeURIComponent(id)}`);
+  const { status, body } = await readJson(fetchFn, `${SEVENTV_API}/v3/emote-sets/${encodeURIComponent(id)}`, {
+    cache: 'no-store',
+  });
   if (status === 404 || status === 400) {
     throw new SevenTvError('7TV has no emote set with that ID. Check the link and try again.', 'not-found');
   }
@@ -127,6 +135,13 @@ export async function fetchEmoteSet(id: string, fetchFn: Fetch = fetch): Promise
       id: e.id,
       alias: e.name,
       ...(e.data?.name ? { defaultName: e.data.name } : {}),
+      // V3 encodes the chat-provider override as three bits; V4 uses one flag.
+      ...(typeof e.flags === 'number' ? {
+        flags: {
+          zeroWidth: (e.flags & 1) !== 0,
+          overrideConflicts: (e.flags & ((1 << 16) | (1 << 17) | (1 << 18))) !== 0,
+        },
+      } : {}),
     })),
   };
 }

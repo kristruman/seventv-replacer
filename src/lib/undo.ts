@@ -55,7 +55,16 @@ export async function undoRun(record: RunRecord, writer: SetWriter, options: Und
   }
 
   for (const swap of record.swaps) {
-    if (aliasOf.get(swap.toId) !== swap.alias || aliasOf.has(swap.fromId)) {
+    const replacement = current.emotes.find((e) => e.id === swap.toId && e.alias === swap.alias);
+    const flagsMatch = !swap.flags || (
+      replacement?.flags?.zeroWidth === swap.flags.zeroWidth
+      && replacement.flags.overrideConflicts === swap.flags.overrideConflicts
+    );
+    const stillMatches = record.manual
+      ? replacement && flagsMatch
+        && !current.emotes.some((e) => e.id !== swap.toId && e.alias === swap.originalAlias)
+      : aliasOf.get(swap.toId) === swap.alias && !aliasOf.has(swap.fromId);
+    if (!stillMatches) {
       report.skipped.push(swap.alias);
       continue;
     }
@@ -67,12 +76,12 @@ export async function undoRun(record: RunRecord, writer: SetWriter, options: Und
     }
     await wait(pauseMs);
     try {
-      await writer.addEmote(record.setId, swap.fromId, swap.originalAlias);
+      await writer.addEmote(record.setId, swap.fromId, swap.originalAlias, swap.flags);
       report.restored++;
     } catch (error) {
       report.failed.push({ alias: swap.alias, reason: reasonOf(error) });
       // Don't leave a gap: put the seasonal emote back where it was.
-      await writer.addEmote(record.setId, swap.toId, swap.alias).catch(() => {});
+      await writer.addEmote(record.setId, swap.toId, swap.alias, swap.flags).catch(() => {});
     }
     await wait(pauseMs);
   }

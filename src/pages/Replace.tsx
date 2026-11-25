@@ -3,9 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useSearchParams } from 'react-router';
 import { currentSeason, isSeasonId, SEASONS, seasonLabel, type SeasonId } from '@shared/seasons';
-import { fetchEmoteSet, fetchMySets, SevenTvError, seventvSetUrl, type EmoteSet, type SetSummary } from '@shared/seventv';
+import { fetchEmoteSet, fetchMySets, SevenTvError, seventvSetUrl, type EmoteSet, type SetEmote, type SetSummary } from '@shared/seventv';
 import type { MappingRow } from '@shared/types';
 import { fetchPreset, reportBroken } from '../api';
+import type { EmoteReplacement } from '../components/EmoteInspector';
 import { ProblemList } from '../components/ProblemList';
 import { SeasonalAlternatives } from '../components/SeasonalAlternatives';
 import { SetDetails } from '../components/SetDetails';
@@ -364,7 +365,7 @@ export function Replace() {
       setQueued((q) => new Set(q).add(problem.id));
       return;
     }
-    void applyFix({ problem, name }, createWriter(token));
+    void applyFix({ problem, name }, createWriter(token, { v4Only: problem.manual }));
   };
 
   const dismiss = (problem: RunProblem) => {
@@ -379,7 +380,7 @@ export function Replace() {
     setUndoing(record.id);
     setUndoResult(undefined);
     try {
-      const report = await undoRun(record, createWriter(token));
+      const report = await undoRun(record, createWriter(token, { v4Only: record.manual }));
       // Keep a record whose undo partly failed: running it again skips what is already back.
       setRuns(report.failed.length ? loadRuns() : forgetRun(record.id));
       // The run's set-aside emotes went back with everything else.
@@ -390,6 +391,102 @@ export function Replace() {
       setUndoResult({ record, error: errorText(error) });
     } finally {
       setUndoing(undefined);
+    }
+  };
+
+  const swapInspectorEmote = async (inspected: SetEmote, replacement: EmoteReplacement): Promise<SetEmote> => {
+    if (!token || !set) throw new Error('Connect to 7TV before swapping emotes.');
+    if (activeRun.current || running || undoing) throw new Error('Wait for the current set change to finish.');
+
+    const writer = createWriter(token, { v4Only: true });
+    activeRun.current = { id: '', writer };
+    setUndoResult(undefined);
+    setRunState({ kind: 'running', done: 0, total: 1 });
+    try {
+      const current = await fetchEmoteSet(set.id);
+      const entries = current.emotes.filter((entry) => entry.alias === inspected.alias);
+      const original = entries[0];
+      if (entries.length !== 1 || original?.id !== inspected.id) {
+        setSet(current);
+        throw new Error(`“${inspected.alias}” changed on 7TV. Reopen the emote to see its current artwork.`);
+      }
+      if (current.emotes.some((entry) => entry.id === replacement.id)) {
+        setSet(current);
+        throw new Error('That artwork is already in this set.');
+      }
+
+      const { alias, flags } = original;
+      const swap = { alias, fromId: original.id, toId: replacement.id, ...(flags ? { flags } : {}) };
+      const report = await executeRun(
+        { mode: 'in-place', manual: true, season, source: current, swaps: [swap] },
+        writer,
+        { onRecord: (record) => { if (record.swaps.length) setRuns(rememberRun(record)); } },
+      );
+
+      const updated: SetEmote = {
+        id: replacement.id,
+        alias,
+        ...(replacement.defaultName ? { defaultName: replacement.defaultName } : {}),
+        ...(flags ? { flags } : {}),
+      };
+
+      if (!report.swapped) {
+        // A dropped response can hide a successful write. Check the alias before reporting failure.
+        const refreshed = await fetchEmoteSet(set.id).catch(() => null);
+        const atAlias = refreshed?.emotes.find((entry) => entry.alias === alias);
+        if (refreshed && atAlias?.id === replacement.id) {
+          report.record.swaps.push({ ...swap, originalAlias: alias });
+          report.swapped = 1;
+          report.failed = [];
+          report.lost = [];
+          report.stopped = undefined;
+          setRuns(rememberRun(report.record));
+          setSet(refreshed);
+          setRunState({ kind: 'done', report });
+          return atAlias;
+        }
+
+        if (refreshed) setSet(refreshed);
+        const missing = refreshed ? !atAlias : report.lost.includes(alias);
+        const reason = report.stopped || report.failed[0]?.reason || '7TV couldn’t complete the swap.';
+        if (missing) {
+          // Restore the original only while the alias is free. 7TV rejects a conflicting alias.
+          try {
+            await writer.addEmote(set.id, original.id, alias, flags);
+            setSet({ ...(refreshed ?? current), emotes: refreshed ? [...refreshed.emotes, original] : current.emotes });
+          } catch {
+            const problem: RunProblem = {
+              id: crypto.randomUUID(),
+              runId: report.record.id,
+              kind: 'missing',
+              mode: 'in-place',
+              season,
+              setId: set.id,
+              setName: set.name,
+              alias,
+              emoteId: original.id,
+              normalId: null,
+              pairing: null,
+              reason: '7TV couldn’t restore the original artwork.',
+              at: new Date().toISOString(),
+              manual: true,
+              flags,
+            };
+            setProblems(updateProblems((list) => [...list, problem]));
+            throw new Error(`${reason} Open Problems to retry restoring the original.`);
+          }
+        }
+        throw new Error(reason);
+      }
+
+      setSet({ ...current, emotes: current.emotes.map((entry) => entry === original ? updated : entry) });
+      setRunState({ kind: 'done', report });
+      return updated;
+    } catch (error) {
+      setRunState({ kind: 'idle' });
+      throw error;
+    } finally {
+      activeRun.current = null;
     }
   };
 
@@ -514,6 +611,9 @@ export function Replace() {
                 <SetDetails
                   key={set.id}
                   set={set}
+                  connected={Boolean(token)}
+                  onConnect={needToken}
+                  onSwap={swapInspectorEmote}
                   seasonal={{ season, preset: Array.isArray(preset) ? preset : [], saved: personal, onSeasonChange: setSeason }}
                 >
                   <fieldset className={ui.options} disabled={running}>
@@ -701,7 +801,7 @@ export function Replace() {
                   <div className={styles.runText}>
                     <p className={styles.runName}>{record.setName}</p>
                     <p className={styles.runMeta}>
-                      {record.copyOnly ? 'Copy only' : `${MODE_NAMES[record.mode]} · ${seasonLabel(record.season)}`} · {when(record.at)}
+                      {record.manual ? 'Single emote swap' : record.copyOnly ? 'Copy only' : `${MODE_NAMES[record.mode]} · ${seasonLabel(record.season)}`} · {when(record.at)}
                     </p>
                   </div>
                   <GunmetalKey size="small" busy={running || undoing === record.id} onClick={() => void undo(record)}>

@@ -2,7 +2,7 @@ import { Grid2X2, Search, SlidersHorizontal } from 'lucide-react';
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { EmoteSet, SetEmote } from '@shared/seventv';
 import { Keycap } from '../design/Keycap';
-import { EmoteInspector, type SeasonalContext } from './EmoteInspector';
+import { EmoteInspector, type EmoteReplacement, type SeasonalContext } from './EmoteInspector';
 import styles from './SetDetails.module.css';
 
 const PAGE_SIZE = 60;
@@ -13,7 +13,16 @@ const TABS = [
 
 type SetTab = (typeof TABS)[number]['id'];
 
-export function SetDetails({ set, seasonal, children }: { set: EmoteSet; seasonal: SeasonalContext; children: ReactNode }) {
+interface SetDetailsProps {
+  set: EmoteSet;
+  seasonal: SeasonalContext;
+  connected: boolean;
+  onConnect(): void;
+  onSwap(emote: SetEmote, replacement: EmoteReplacement): Promise<SetEmote>;
+  children: ReactNode;
+}
+
+export function SetDetails({ set, seasonal, connected, onConnect, onSwap, children }: SetDetailsProps) {
   const id = useId();
   const [tab, setTab] = useState<SetTab>('emotes');
   const [inspected, setInspected] = useState<SetEmote>();
@@ -68,7 +77,15 @@ export function SetDetails({ set, seasonal, children }: { set: EmoteSet; seasona
         {children}
       </div>
       {inspected && (
-        <EmoteInspector set={set} emote={inspected} seasonal={seasonal} onDismiss={() => setInspected(undefined)} />
+        <EmoteInspector
+          set={set}
+          emote={inspected}
+          seasonal={seasonal}
+          connected={connected}
+          onConnect={onConnect}
+          onSwap={async (replacement) => setInspected(await onSwap(inspected, replacement))}
+          onDismiss={() => setInspected(undefined)}
+        />
       )}
     </>
   );

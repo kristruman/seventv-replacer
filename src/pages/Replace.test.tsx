@@ -39,6 +39,27 @@ async function openTokenField() {
   return screen.getByLabelText('7TV token', { exact: true });
 }
 
+function mockModal() {
+  const prototype = HTMLDialogElement.prototype;
+  const methods = {
+    showModal(this: HTMLDialogElement) { this.open = true; },
+    close(this: HTMLDialogElement) {
+      this.open = false;
+      this.dispatchEvent(new Event('close'));
+    },
+  };
+  const original = Object.getOwnPropertyDescriptors(prototype);
+  for (const [name, value] of Object.entries(methods)) {
+    Object.defineProperty(prototype, name, { configurable: true, value });
+  }
+  return () => {
+    for (const name of Object.keys(methods)) {
+      if (original[name]) Object.defineProperty(prototype, name, original[name]);
+      else Reflect.deleteProperty(prototype, name);
+    }
+  };
+}
+
 describe('Replace', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -77,12 +98,7 @@ describe('Replace', () => {
   });
 
   it('inspects a seasonal emote in its set and shows its regular artwork and read-only suggestions', async () => {
-    const dialogPrototype = HTMLDialogElement.prototype;
-    const originalShowModal = Object.getOwnPropertyDescriptor(dialogPrototype, 'showModal');
-    Object.defineProperty(dialogPrototype, 'showModal', {
-      configurable: true,
-      value(this: HTMLDialogElement) { this.open = true; },
-    });
+    const restoreModal = mockModal();
     try {
       sets[SET_ID] = { name: 'Main', emotes: [['peepoHappy', A2], ['Sadge', B]] };
       const read = sevenTvRead(sets, (change) => void mutations.push(change));
@@ -114,8 +130,73 @@ describe('Replace', () => {
       expect(within(candidates).getByText('In this set as Sadge')).toBeInTheDocument();
       expect(mutations).toEqual([]);
     } finally {
-      if (originalShowModal) Object.defineProperty(dialogPrototype, 'showModal', originalShowModal);
-      else Reflect.deleteProperty(dialogPrototype, 'showModal');
+      restoreModal();
+    }
+  });
+
+  it('swaps the selected artwork only after confirmation, keeps the alias and flags, and can undo it', async () => {
+    const restoreModal = mockModal();
+    localStorage.setItem('ser.7tv-token', 'tok');
+    try {
+      sets[SET_ID] = { name: 'Main', emotes: [['peepoHappy', A], ['AnotherAlias', A], ['Sadge', B]] };
+      const read = sevenTvRead(sets, (change) => {
+        mutations.push(change);
+        const entries = sets[change.id]!.emotes;
+        if (change.action === 'REMOVE') {
+          sets[change.id]!.emotes = entries.filter(([alias, id]) => id !== change.emote_id || alias !== change.name);
+        } else entries.push([change.name!, change.emote_id]);
+        return undefined;
+      });
+      mockFetch({
+        ...read,
+        'https://7tv.io/v3/emote-sets/': (url) => {
+          const id = url.split('/').pop()!;
+          const set = sets[id]!;
+          return json({
+            id,
+            name: set.name,
+            emotes: set.emotes.map(([name, eid]) => ({ id: eid, name, flags: name === 'peepoHappy' ? 0x70001 : 0 })),
+          });
+        },
+        'https://7tv.io/v4/gql': (url, init) => {
+          const body = JSON.parse(String(init?.body));
+          if (Array.isArray(body) && body[0]?.query.includes('addEmote')) {
+            expect(body[0]?.query).toContain('zeroWidth: true, overrideConflicts: true');
+          }
+          if (body.query?.includes('SeasonalEmotes')) {
+            return json({ data: { emotes: { search: { items: [
+              { id: A2, defaultName: 'SnowPeepo', owner: null },
+              { id: X, defaultName: 'MerryPeepo', owner: null },
+            ] } } } });
+          }
+          return read['https://7tv.io/v4/gql'](url, init);
+        },
+        '/api/presets/': () => preset('winter'),
+      });
+      renderAt('/replace?channel=niena&season=winter');
+      await userEvent.click(await screen.findByRole('button', { name: /Main/ }));
+      await userEvent.click(await screen.findByRole('button', { name: 'peepoHappy' }));
+      const dialog = screen.getByRole('dialog', { name: 'peepoHappy' });
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Select MerryPeepo' }));
+      expect(mutations).toEqual([]);
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Swap in this set' }));
+      await within(dialog).findByText('Swapped artwork for “peepoHappy”. Undo is available in Recent runs.');
+      expect(within(dialog).getByRole('link', { name: 'peepoHappy on 7TV' })).toHaveAttribute('href', `https://7tv.app/emotes/${X}`);
+      expect(mutations).toEqual([
+        { id: SET_ID, action: 'REMOVE', emote_id: A, name: 'peepoHappy' },
+        { id: SET_ID, action: 'ADD', emote_id: X, name: 'peepoHappy' },
+      ]);
+      expect(sets[SET_ID]!.emotes).toContainEqual(['AnotherAlias', A]);
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Close emote details' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      await screen.findByText('Put back 1 emote in “Main”.');
+      expect(mutations.slice(2)).toEqual([
+        { id: SET_ID, action: 'REMOVE', emote_id: X, name: 'peepoHappy' },
+        { id: SET_ID, action: 'ADD', emote_id: A, name: 'peepoHappy' },
+      ]);
+      expect(sets[SET_ID]!.emotes).toContainEqual(['AnotherAlias', A]);
+    } finally {
+      restoreModal();
     }
   });
 

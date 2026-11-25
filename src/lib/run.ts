@@ -1,5 +1,5 @@
 import type { SeasonId } from '@shared/seasons';
-import { checkEmote, type EmoteHealth, type EmoteSet } from '@shared/seventv';
+import { checkEmote, type EmoteHealth, type EmoteSet, type SetEmoteFlags } from '@shared/seventv';
 import type { MappingRow } from '@shared/types';
 import { BATCH_SIZE, sleep, TOKEN_REJECTED, WriteError, type ItemResult, type SetWriter } from './seventv-write';
 
@@ -10,6 +10,7 @@ export interface PlannedSwap {
   alias: string;
   fromId: string;
   toId: string;
+  flags?: SetEmoteFlags;
 }
 
 export const swapKey = (id: string, alias: string) => JSON.stringify([id, alias]);
@@ -51,12 +52,13 @@ export interface RunRecord {
   mode: RunMode;
   season: SeasonId;
   copyOnly?: boolean;
+  manual?: boolean;
   /** The set the run changed: the source itself, or the copy it filled. */
   setId: string;
   setName: string;
   /** The run created this set, so undoing it means deleting the set. */
   createdSet: boolean;
-  swaps: Array<{ fromId: string; toId: string; alias: string; originalAlias: string }>;
+  swaps: Array<PlannedSwap & { originalAlias: string }>;
   /** Emotes put into an existing set by a duplicate + replace. */
   added: Array<{ id: string; alias: string }>;
 }
@@ -87,6 +89,8 @@ export interface RunProblem {
   pairing: { originalId: string; replacementId: string } | null;
   /** 7TV's own words. */
   reason: string;
+  manual?: boolean;
+  flags?: SetEmoteFlags;
   at: string;
 }
 
@@ -108,6 +112,7 @@ export interface RunInput {
   mode: RunMode;
   season: SeasonId;
   copyOnly?: boolean;
+  manual?: boolean;
   source: EmoteSet;
   /** The ticked swaps only. */
   swaps: PlannedSwap[];
@@ -175,6 +180,7 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
     mode: input.mode,
     season: input.season,
     ...(input.copyOnly ? { copyOnly: true } : {}),
+    ...(input.manual ? { manual: true } : {}),
     setId: input.source.id,
     setName: input.source.name,
     createdSet: false,
@@ -209,7 +215,7 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
     const kind = await kindOf(swap.toId);
     await pause();
     try {
-      await writer.addEmote(record.setId, normalId, swap.alias);
+      await writer.addEmote(record.setId, normalId, swap.alias, swap.flags);
     } catch (error) {
       report.lost.push(swap.alias);
       if (isAuth(error)) throw error;
@@ -257,7 +263,9 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
       if (removed.length) {
         await pause();
         try {
-          additions = await writer.addEmotes(record.setId, removed.map((s) => ({ emoteId: s.toId, alias: s.alias })));
+          additions = await writer.addEmotes(record.setId, removed.map((s) => ({
+            emoteId: s.toId, alias: s.alias, ...(s.flags ? { flags: s.flags } : {}),
+          })));
         } catch (error) {
           additions = allFailed(removed.length, error);
           stopped = isAuth(error);
@@ -267,7 +275,7 @@ export async function executeRun(input: RunInput, writer: SetWriter, options: Ru
       for (const [i, swap] of removed.entries()) {
         const result = additions[i]!;
         if (result.ok) {
-          record.swaps.push({ fromId: swap.fromId, toId: swap.toId, alias: swap.alias, originalAlias: swap.alias });
+          record.swaps.push({ ...swap, originalAlias: swap.alias });
           report.swapped++;
           continue;
         }

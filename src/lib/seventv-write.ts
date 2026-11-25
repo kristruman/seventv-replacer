@@ -1,4 +1,4 @@
-import { SEVENTV_API } from '@shared/seventv';
+import { SEVENTV_API, type SetEmoteFlags } from '@shared/seventv';
 
 /**
  * Changes to 7TV sets, made with the user's own token. The token goes to 7TV
@@ -26,6 +26,7 @@ export class WriteError extends Error {
 export interface EmoteRef {
   emoteId: string;
   alias: string;
+  flags?: SetEmoteFlags;
 }
 
 /** One emote's outcome inside a batch: 7TV accepts or refuses each change on its own. */
@@ -39,7 +40,7 @@ export interface SetWriter {
    */
   addEmotes(setId: string, emotes: EmoteRef[]): Promise<ItemResult[]>;
   removeEmotes(setId: string, emotes: EmoteRef[]): Promise<ItemResult[]>;
-  addEmote(setId: string, emoteId: string, alias: string): Promise<void>;
+  addEmote(setId: string, emoteId: string, alias: string, flags?: SetEmoteFlags): Promise<void>;
   removeEmote(setId: string, emoteId: string, alias: string): Promise<void>;
   /** Resolves to the new set's ID. */
   createSet(ownerId: string, name: string): Promise<string>;
@@ -88,11 +89,15 @@ const BEYOND_ASCII_TRIES = 2;
 /** v4 answering like this means it can't run our mutation at all, not that 7TV refused the emote. */
 const SCHEMA_PROBLEM = /unknown (field|argument|type)|cannot query field|is not defined|syntax error|parse error/i;
 
-const v4Mutation = (field: 'addEmote' | 'removeEmote', setId: string, emote: EmoteRef) =>
+const v4Mutation = (field: 'addEmote' | 'removeEmote', setId: string, emote: EmoteRef) => {
+  const flags = field === 'addEmote' && emote.flags
+    ? `, zeroWidth: ${emote.flags.zeroWidth}, overrideConflicts: ${emote.flags.overrideConflicts}`
+    : '';
   // JSON string escaping is valid GraphQL string escaping, so any alias (quotes included) stays intact.
-  `mutation { emoteSets { emoteSet(id: ${JSON.stringify(setId)}) { ${field}(id: { emoteId: ${JSON.stringify(
+  return `mutation { emoteSets { emoteSet(id: ${JSON.stringify(setId)}) { ${field}(id: { emoteId: ${JSON.stringify(
     emote.emoteId,
-  )}, alias: ${JSON.stringify(emote.alias)} }) { id } } } }`;
+  )}, alias: ${JSON.stringify(emote.alias)} }${flags}) { id } } } }`;
+};
 
 interface RetryOptions {
   retries?: number;
@@ -130,7 +135,7 @@ class BatchUnsupported extends Error {}
 
 export function createWriter(
   token: string,
-  options: RetryOptions & { fetchFn?: typeof fetch; pauseMs?: number } = {},
+  options: RetryOptions & { fetchFn?: typeof fetch; pauseMs?: number; v4Only?: boolean } = {},
 ): SetWriter {
   const fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const { pauseMs = 250, sleep: wait = sleep } = options;
@@ -179,7 +184,11 @@ export function createWriter(
     }
     return answers.map((answer) => {
       const message = answer?.errors?.[0]?.message;
-      return message ? { ok: false, error: toError(200, message) } : { ok: true };
+      if (message) return { ok: false, error: toError(status, message) };
+      if (!answer?.data || status < 200 || status >= 300) {
+        return { ok: false, error: new WriteError('7TV didn’t confirm the change.', 'network') };
+      }
+      return { ok: true };
     });
   };
 
@@ -224,7 +233,7 @@ export function createWriter(
    */
   const sameSpelling = async (setId: string, emote: EmoteRef, refusal: ItemResult) => {
     const v4 = await alone('addEmote', setId, emote, refusal);
-    if (v4.ok || v4.error.kind !== 'refused') return v4;
+    if (options.v4Only || v4.ok || v4.error.kind !== 'refused') return v4;
     await wait(pauseMs);
     const [v3] = await oneByOne('ADD', setId, [emote]);
     return v3?.ok ? v3 : v4;
@@ -244,7 +253,9 @@ export function createWriter(
             if (answer.ok) continue;
             if (isTransient(answer.error)) {
               await wait(options.baseDelayMs ?? 1000);
-              answers[i] = (await oneByOne(action, setId, [chunk[i]!]))[0]!;
+              answers[i] = options.v4Only
+                ? (await withRetry(() => batch(field, setId, [chunk[i]!]), options))[0]!
+                : (await oneByOne(action, setId, [chunk[i]!]))[0]!;
             } else if (field === 'addEmote') {
               answers[i] = await sameSpelling(setId, chunk[i]!, answer);
             } else if (BEYOND_ASCII.test(chunk[i]!.alias)) {
@@ -255,6 +266,8 @@ export function createWriter(
           continue;
         } catch (error) {
           if (!(error instanceof BatchUnsupported)) throw error;
+          // V3 removal uses the emote ID only and can remove other aliases.
+          if (options.v4Only) throw new WriteError(error.message, 'refused');
           batching = false;
         }
       }
@@ -271,7 +284,7 @@ export function createWriter(
   return {
     addEmotes: (setId, emotes) => many('addEmote', setId, emotes),
     removeEmotes: (setId, emotes) => many('removeEmote', setId, emotes),
-    addEmote: (setId, emoteId, alias) => single('addEmote', setId, { emoteId, alias }),
+    addEmote: (setId, emoteId, alias, flags) => single('addEmote', setId, { emoteId, alias, flags }),
     removeEmote: (setId, emoteId, alias) => single('removeEmote', setId, { emoteId, alias }),
     async createSet(ownerId, name) {
       const data = await send<{ createEmoteSet?: { id: string } }>(CREATE_SET, { user_id: ownerId, data: { name } });

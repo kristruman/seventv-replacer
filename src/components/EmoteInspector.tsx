@@ -1,4 +1,4 @@
-import { Search, X } from 'lucide-react';
+import { ArrowRight, Search, X } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { isSeasonId, SEASONS, seasonLabel, type SeasonId } from '@shared/seasons';
 import { searchSeasonalEmotes, type EmoteSet, type SeasonalCandidate, type SetEmote } from '@shared/seventv';
@@ -13,22 +13,35 @@ export interface SeasonalContext {
   onSeasonChange(season: SeasonId): void;
 }
 
+export interface EmoteReplacement {
+  id: string;
+  label: string;
+  defaultName?: string;
+  creator?: string;
+}
+
 interface Props {
   set: EmoteSet;
   emote: SetEmote;
   seasonal: SeasonalContext;
+  connected: boolean;
+  onConnect(): void;
+  onSwap(replacement: EmoteReplacement): Promise<void>;
   onDismiss(): void;
 }
 
 type SearchResult = { candidates: SeasonalCandidate[] } | { error: string };
 
-export function EmoteInspector({ set, emote, seasonal, onDismiss }: Props) {
+export function EmoteInspector({ set, emote, seasonal, connected, onConnect, onSwap, onDismiss }: Props) {
   const { season, preset, saved, onSeasonChange } = seasonal;
   const modal = useRef<HTMLDialogElement>(null);
   const heading = useId();
   const [input, setInput] = useState<string>();
   const [request, setRequest] = useState<{ term: string }>();
   const [result, setResult] = useState<SearchResult>();
+  const [choice, setChoice] = useState<EmoteReplacement>();
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ message: string; error?: boolean }>();
 
   const label = seasonLabel(season);
   const originals = preset.filter((mapping) => mapping.replacementId === emote.id && mapping.originalId !== emote.id);
@@ -70,19 +83,60 @@ export function EmoteInspector({ set, emote, seasonal, onDismiss }: Props) {
     shown.add(id);
     return true;
   }) : [];
-  const setUsage = (id: string) => {
-    const aliases = set.emotes.filter((entry) => entry.id === id).map((entry) => entry.alias).join(', ');
-    return aliases ? <p>In this set as {aliases}</p> : null;
+  const selectionControl = (candidate: EmoteReplacement) => {
+    const aliases = set.emotes.filter(({ id }) => id === candidate.id).map(({ alias }) => alias).join(', ');
+    if (aliases) return <small className={styles.used}>In this set as {aliases}</small>;
+    return (
+      <button
+        type="button"
+        className={styles.choose}
+        aria-label={`Select ${candidate.label}${candidate.creator ? ` by ${candidate.creator}` : ''}`}
+        aria-pressed={choice?.id === candidate.id}
+        disabled={saving}
+        onClick={() => {
+          setChoice(candidate);
+          setFeedback(undefined);
+        }}
+      >
+        {choice?.id === candidate.id ? 'Selected' : 'Select'}
+      </button>
+    );
+  };
+
+  const confirm = async () => {
+    if (!choice || saving) return;
+    if (!connected) {
+      modal.current?.close();
+      onConnect();
+      return;
+    }
+    setSaving(true);
+    setFeedback(undefined);
+    try {
+      await onSwap(choice);
+      setFeedback({ message: `Swapped artwork for “${emote.alias}”. Undo is available in Recent runs.` });
+      setChoice(undefined);
+    } catch (error) {
+      setFeedback({ message: error instanceof Error ? error.message : '7TV couldn’t complete the swap.', error: true });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
-    <dialog ref={modal} className={styles.dialog} aria-labelledby={heading} onClose={onDismiss}>
+    <dialog
+      ref={modal}
+      className={styles.dialog}
+      aria-labelledby={heading}
+      onClose={onDismiss}
+      onCancel={(event) => { if (saving) event.preventDefault(); }}
+    >
       <header className={styles.header}>
         <div>
           <p>{set.name}</p>
           <h2 id={heading}>{emote.alias}</h2>
         </div>
-        <button type="button" className={styles.close} aria-label="Close emote details" onClick={() => modal.current?.close()}>
+        <button type="button" className={styles.close} aria-label="Close emote details" disabled={saving} onClick={() => modal.current?.close()}>
           <X size={19} aria-hidden="true" />
         </button>
       </header>
@@ -104,7 +158,7 @@ export function EmoteInspector({ set, emote, seasonal, onDismiss }: Props) {
         <section className={styles.alternatives} aria-label="Potential replacements">
           <div className={styles.sectionHeading}>
             <h3>Potential replacements</h3>
-            <select aria-label="Replacement season" value={season} onChange={(event) => {
+            <select aria-label="Replacement season" value={season} disabled={saving} onChange={(event) => {
               if (isSeasonId(event.target.value)) onSeasonChange(event.target.value);
             }}>
               {SEASONS.map((option) => <option key={option} value={option}>{seasonLabel(option)}</option>)}
@@ -113,12 +167,10 @@ export function EmoteInspector({ set, emote, seasonal, onDismiss }: Props) {
           {!!related.size && (
             <ul className={styles.rows} aria-label="Known versions">
               {Array.from(related, ([id, description]) => (
-                <li key={id}>
+                <li key={id} data-selected={choice?.id === id || undefined}>
                   <Keycap emoteId={id} alt={`${description} of ${emote.alias}`} />
-                  <div>
-                    <strong>{description}</strong>
-                    {setUsage(id)}
-                  </div>
+                  <strong>{description}</strong>
+                  {selectionControl({ id, label: description })}
                 </li>
               ))}
             </ul>
@@ -146,20 +198,45 @@ export function EmoteInspector({ set, emote, seasonal, onDismiss }: Props) {
           </p>
           {candidates.length > 0 && (
             <ul className={styles.rows} aria-label="7TV replacement candidates">
-              {candidates.map((candidate) => (
-                <li key={candidate.id}>
-                  <Keycap emoteId={candidate.id} alt={candidate.defaultName} preferCdn />
-                  <div>
-                    <strong>{candidate.defaultName}</strong>
-                    {candidate.owner?.mainConnection && <p>{candidate.owner.mainConnection.platformDisplayName}</p>}
-                    {setUsage(candidate.id)}
-                  </div>
-                </li>
-              ))}
+              {candidates.map((candidate) => {
+                const creator = candidate.owner?.mainConnection?.platformDisplayName;
+                return (
+                  <li key={candidate.id} data-selected={choice?.id === candidate.id || undefined}>
+                    <Keycap emoteId={candidate.id} alt={candidate.defaultName} preferCdn />
+                    <div>
+                      <strong>{candidate.defaultName}</strong>
+                      {creator && <p>{creator}</p>}
+                    </div>
+                    {selectionControl({ id: candidate.id, label: candidate.defaultName, defaultName: candidate.defaultName, creator })}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
       </div>
+      {(choice || feedback) && (
+        <footer className={styles.confirm}>
+          {feedback && (
+            <p className={styles.feedback} data-error={feedback.error || undefined} role={feedback.error ? 'alert' : 'status'}>
+              {feedback.message}
+            </p>
+          )}
+          {choice && (
+            <div className={styles.confirmRow}>
+              <div className={styles.selectedChoice}>
+                <strong>{choice.label}</strong>
+                {choice.creator && <small>{choice.creator}</small>}
+                <small>Chat name stays {emote.alias}</small>
+              </div>
+              <button type="button" className={styles.apply} disabled={saving} onClick={() => void confirm()}>
+                {saving ? 'Swapping…' : connected ? 'Swap in this set' : 'Connect 7TV'}
+                <ArrowRight size={15} aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </footer>
+      )}
     </dialog>
   );
 }

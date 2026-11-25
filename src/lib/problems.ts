@@ -25,10 +25,13 @@ export async function fixProblem(
   }
   const set = await fetchSet(problem.setId);
   const has = (id: string) => set.emotes.find((e) => e.id === id);
-  if (has(problem.emoteId)) throw new FixRefused('That emote is already in the set.');
+  const alreadyPresent = problem.manual
+    ? set.emotes.some((e) => e.id === problem.emoteId && e.alias === name)
+    : has(problem.emoteId);
+  if (alreadyPresent) throw new FixRefused('That emote is already in the set.');
 
   if (problem.kind === 'missing') {
-    await writer.addEmote(problem.setId, problem.emoteId, name);
+    await writer.addEmote(problem.setId, problem.emoteId, name, problem.flags);
     return;
   }
 
