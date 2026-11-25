@@ -9,6 +9,8 @@ interface KeycapProps {
   emoteId?: string;
   alt: string;
   caption?: string;
+  onInspect?: () => void;
+  preferCdn?: boolean;
   legend?: string;
   state?: KeycapState;
   pressed?: boolean;
@@ -16,10 +18,12 @@ interface KeycapProps {
 }
 
 /**
- * One emote printed on a PBT keycap. Hovering magnifies the art; clicking opens the emote on 7TV in a new tab.
+ * One emote printed on a PBT keycap. Hovering magnifies the art; clicking inspects the emote or opens it on 7TV.
  * A cap with an empty `alt` is decorative: still clickable, but kept out of the tab order and the accessibility tree.
  */
-export function Keycap({ emoteId, alt, caption, legend, state = 'idle', pressed = false, tone = 'bone' }: KeycapProps) {
+export function Keycap({
+  emoteId, alt, caption, onInspect, preferCdn = false, legend, state = 'idle', pressed = false, tone = 'bone',
+}: KeycapProps) {
   const [failedFor, setFailedFor] = useState<string | null>(null);
   const shared = { className: styles.key, 'data-state': state, 'data-pressed': pressed || undefined, 'data-tone': tone };
   const legendText = legend && (
@@ -29,6 +33,28 @@ export function Keycap({ emoteId, alt, caption, legend, state = 'idle', pressed 
   );
 
   if (!emoteId) return <div {...shared}>{legendText}</div>;
+
+  const useCdn = preferCdn !== (failedFor === emoteId);
+  const content = (
+    <>
+      <img
+        className={styles.art}
+        src={useCdn ? emoteCdnUrl(emoteId) : emoteImageUrl(emoteId)}
+        alt={alt}
+        width={56}
+        height={56}
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailedFor(emoteId)}
+      />
+      {caption && <span title={caption}>{caption}</span>}
+      {legendText}
+    </>
+  );
+
+  if (onInspect) {
+    return <button {...shared} type="button" onClick={onInspect} aria-label={alt} aria-haspopup="dialog">{content}</button>;
+  }
 
   return (
     <a
@@ -40,18 +66,7 @@ export function Keycap({ emoteId, alt, caption, legend, state = 'idle', pressed 
       aria-hidden={alt ? undefined : true}
       tabIndex={alt ? undefined : -1}
     >
-      <img
-        className={styles.art}
-        src={failedFor === emoteId ? emoteCdnUrl(emoteId) : emoteImageUrl(emoteId)}
-        alt={alt}
-        width={56}
-        height={56}
-        loading="lazy"
-        decoding="async"
-        onError={() => setFailedFor(emoteId)}
-      />
-      {caption && <span title={caption}>{caption}</span>}
-      {legendText}
+      {content}
     </a>
   );
 }

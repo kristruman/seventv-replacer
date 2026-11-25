@@ -101,8 +101,8 @@
   min-width: 0;
 }
 
-.tiles a {
-  --key-hover-scale: 1.15;
+.tiles button {
+  width: 100%;
   min-height: 78px;
   grid-template-rows: 40px 1fr;
   gap: 4px;
@@ -112,14 +112,16 @@
   border-radius: 8px;
   background: var(--raised);
   box-shadow: none;
+  font: inherit;
+  cursor: pointer;
 }
 
-.tiles a:hover {
+.tiles button:hover {
   border-color: var(--accent-line);
   background: var(--interactive);
 }
 
-.tiles a::before {
+.tiles button::before {
   content: none;
 }
 

@@ -61,7 +61,7 @@ describe('Replace', () => {
     expect(screen.queryByRole('combobox', { name: 'Operation' })).not.toBeInTheDocument();
     const search = screen.getByRole('searchbox', { name: 'Search emotes' });
     await userEvent.type(search, '61');
-    expect(within(gallery).getByRole('link', { name: 'Emote 61 on 7TV' })).toBeInTheDocument();
+    expect(within(gallery).getByRole('button', { name: 'Emote 61' })).toBeInTheDocument();
     expect(within(gallery).getAllByRole('listitem')).toHaveLength(1);
     await userEvent.clear(search);
     await userEvent.click(screen.getByRole('button', { name: 'Show 1 more' }));
@@ -74,6 +74,49 @@ describe('Replace', () => {
     expect(screen.getByRole('combobox', { name: 'Operation' })).toHaveValue('seasonal-copy');
     expect(screen.queryByRole('searchbox', { name: 'Search emotes' })).not.toBeInTheDocument();
     expect(mutations).toEqual([]);
+  });
+
+  it('inspects a seasonal emote in its set and shows its regular artwork and read-only suggestions', async () => {
+    const dialogPrototype = HTMLDialogElement.prototype;
+    const originalShowModal = Object.getOwnPropertyDescriptor(dialogPrototype, 'showModal');
+    Object.defineProperty(dialogPrototype, 'showModal', {
+      configurable: true,
+      value(this: HTMLDialogElement) { this.open = true; },
+    });
+    try {
+      sets[SET_ID] = { name: 'Main', emotes: [['peepoHappy', A2], ['Sadge', B]] };
+      const read = sevenTvRead(sets, (change) => void mutations.push(change));
+      mockFetch({
+        ...read,
+        'https://7tv.io/v4/gql': (url, init) => {
+          const body = JSON.parse(String(init?.body));
+          if (!body.query?.includes('SeasonalEmotes')) return read['https://7tv.io/v4/gql'](url, init);
+          expect(body.variables).toMatchObject({ name: 'peepoHappy', tags: expect.arrayContaining(['Christmas']) });
+          expect(new Headers(init?.headers).has('Authorization')).toBe(false);
+          return json({ data: { emotes: { search: { items: [
+            { id: A2, defaultName: 'CurrentPeepo', owner: null },
+            { id: A, defaultName: 'OriginalPeepo', owner: null },
+            { id: B, defaultName: 'AnotherPeepo', owner: null },
+          ] } } } });
+        },
+        '/api/presets/': () => preset('winter'),
+      });
+      renderAt('/replace?channel=niena&season=winter');
+      await userEvent.click(await screen.findByRole('button', { name: /Main/ }));
+      await userEvent.click(await screen.findByRole('button', { name: 'peepoHappy' }));
+      const dialog = screen.getByRole('dialog', { name: 'peepoHappy' });
+      expect(within(dialog).getByText('Main')).toBeInTheDocument();
+      expect(within(dialog).getByText('Chat name in this set')).toBeInTheDocument();
+      expect(within(dialog).getByRole('link', { name: /regular version of peepoHappy/i }))
+        .toHaveAttribute('href', `https://7tv.app/emotes/${A}`);
+      const candidates = await within(dialog).findByRole('list', { name: '7TV replacement candidates' });
+      expect(within(candidates).getAllByRole('listitem')).toHaveLength(1);
+      expect(within(candidates).getByText('In this set as Sadge')).toBeInTheDocument();
+      expect(mutations).toEqual([]);
+    } finally {
+      if (originalShowModal) Object.defineProperty(dialogPrototype, 'showModal', originalShowModal);
+      else Reflect.deleteProperty(dialogPrototype, 'showModal');
+    }
   });
 
   it('automatically lists the saved token account’s sets with its active set first', async () => {

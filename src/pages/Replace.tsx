@@ -158,13 +158,13 @@ export function Replace() {
   }, [token, accountAttempt]);
 
   useEffect(() => {
-    if (copyOnly || preset !== undefined) return;
+    if (preset !== undefined) return;
     setPresets((p) => ({ ...p, [season]: 'loading' }));
     fetchPreset(season).then(
       (body) => setPresets((p) => ({ ...p, [season]: body.mappings })),
       () => setPresets((p) => ({ ...p, [season]: 'failed' })),
     );
-  }, [season, preset, copyOnly]);
+  }, [season, preset]);
 
   // A new set, season or mode is a new preview: everything starts ticked again.
   useEffect(() => setUnticked(new Set()), [set?.id, season, mode, copyOnly]);
@@ -511,7 +511,11 @@ export function Replace() {
                   </a>
                 </header>
 
-                <SetDetails key={set.id} set={set}>
+                <SetDetails
+                  key={set.id}
+                  set={set}
+                  seasonal={{ season, preset: Array.isArray(preset) ? preset : [], saved: personal, onSeasonChange: setSeason }}
+                >
                   <fieldset className={ui.options} disabled={running}>
                     <legend><SlidersHorizontal size={16} aria-hidden="true" /> Set options</legend>
                     <div className={ui.selectGrid}>

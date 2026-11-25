@@ -1,7 +1,8 @@
 import { Grid2X2, Search, SlidersHorizontal } from 'lucide-react';
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import type { EmoteSet } from '@shared/seventv';
+import type { EmoteSet, SetEmote } from '@shared/seventv';
 import { Keycap } from '../design/Keycap';
+import { EmoteInspector, type SeasonalContext } from './EmoteInspector';
 import styles from './SetDetails.module.css';
 
 const PAGE_SIZE = 60;
@@ -12,9 +13,10 @@ const TABS = [
 
 type SetTab = (typeof TABS)[number]['id'];
 
-export function SetDetails({ set, children }: { set: EmoteSet; children: ReactNode }) {
+export function SetDetails({ set, seasonal, children }: { set: EmoteSet; seasonal: SeasonalContext; children: ReactNode }) {
   const id = useId();
   const [tab, setTab] = useState<SetTab>('emotes');
+  const [inspected, setInspected] = useState<SetEmote>();
   const buttons = useRef<Partial<Record<SetTab, HTMLButtonElement>>>({});
 
   const navigate = (event: KeyboardEvent<HTMLButtonElement>, current: SetTab) => {
@@ -60,16 +62,19 @@ export function SetDetails({ set, children }: { set: EmoteSet; children: ReactNo
         ))}
       </div>
       <div id={`${id}-emotes-panel`} role="tabpanel" aria-labelledby={`${id}-emotes-tab`} hidden={tab !== 'emotes'}>
-        <EmoteGallery emotes={set.emotes} />
+        <EmoteGallery emotes={set.emotes} onInspect={setInspected} />
       </div>
       <div id={`${id}-actions-panel`} role="tabpanel" aria-labelledby={`${id}-actions-tab`} hidden={tab !== 'actions'}>
         {children}
       </div>
+      {inspected && (
+        <EmoteInspector set={set} emote={inspected} seasonal={seasonal} onDismiss={() => setInspected(undefined)} />
+      )}
     </>
   );
 }
 
-function EmoteGallery({ emotes }: { emotes: EmoteSet['emotes'] }) {
+function EmoteGallery({ emotes, onInspect }: { emotes: SetEmote[]; onInspect(emote: SetEmote): void }) {
   const [query, setQuery] = useState('');
   const [limit, setLimit] = useState(PAGE_SIZE);
   const term = query.trim().toLowerCase();
@@ -108,9 +113,9 @@ function EmoteGallery({ emotes }: { emotes: EmoteSet['emotes'] }) {
       </div>
       {visible.length > 0 ? (
         <ul className={styles.tiles} aria-label="Emotes in this set">
-          {visible.map(({ id, alias }) => (
-            <li key={JSON.stringify([id, alias])}>
-              <Keycap emoteId={id} alt={alias} caption={alias} />
+          {visible.map((emote) => (
+            <li key={JSON.stringify([emote.id, emote.alias])}>
+              <Keycap emoteId={emote.id} alt={emote.alias} caption={emote.alias} onInspect={() => onInspect(emote)} />
             </li>
           ))}
         </ul>

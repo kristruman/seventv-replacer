@@ -1,0 +1,194 @@
+.dialog {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(100%, 450px);
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: -16px 0 50px rgb(0 0 0 / 0.35);
+}
+
+.dialog::backdrop {
+  background: rgb(5 10 16 / 0.62);
+}
+
+.header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.header h2,
+.header p,
+.sectionHeading h3,
+.status {
+  margin: 0;
+}
+
+.header h2 {
+  font-size: 22px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.header p,
+.current dt,
+.rows p,
+.status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.header p {
+  margin-bottom: 3px;
+}
+
+.close,
+.search button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--raised);
+  cursor: pointer;
+}
+
+.close:hover,
+.search button:hover {
+  background: var(--interactive);
+}
+
+.body {
+  display: grid;
+  gap: 22px;
+  padding: 16px 20px 24px;
+}
+
+.current {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.current dl,
+.current dd {
+  margin: 0;
+}
+
+.current dd {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.current dd + dt {
+  margin-top: 6px;
+}
+
+.alternatives {
+  display: grid;
+  gap: 10px;
+}
+
+.sectionHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sectionHeading h3 {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.sectionHeading select,
+.search input {
+  height: 40px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+}
+
+.search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.search input {
+  min-width: 0;
+}
+
+.rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rows li {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.rows strong,
+.rows p {
+  overflow-wrap: anywhere;
+}
+
+.rows p {
+  margin: 0;
+}
+
+.current a,
+.rows a {
+  --key-hover-scale: 1.15;
+  border-radius: 7px;
+  background: var(--interactive);
+  box-shadow: none;
+}
+
+.current a::before,
+.rows a::before {
+  content: none;
+}
+
+.current img,
+.rows img {
+  width: 78%;
+  height: 78%;
+}
