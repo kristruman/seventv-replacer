@@ -4,11 +4,11 @@
 }
 
 .label {
-  font-family: var(--font-mono);
+  font-family: var(--field-font, var(--font-mono));
   font-weight: 500;
   font-size: 12px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: var(--field-tracking, 0.1em);
+  text-transform: var(--field-case, uppercase);
   color: var(--ink-soft);
 }
 
@@ -16,18 +16,18 @@
   width: 100%;
   height: var(--deck-field-height, 60px);
   padding: 0 var(--deck-field-padding, 18px);
-  border: var(--deck-field-border, 3px) solid var(--charcoal);
-  border-radius: 10px;
-  background: var(--bone);
-  color: var(--charcoal);
-  font-family: var(--font-mono);
+  border: var(--deck-field-border, 3px) solid var(--field-border-color, var(--charcoal));
+  border-radius: var(--field-radius, 10px);
+  background: var(--field-surface, var(--bone));
+  color: var(--field-text, var(--charcoal));
+  font-family: var(--field-font, var(--font-mono));
   font-weight: 500;
   font-size: var(--deck-field-font-size, 20px);
-  box-shadow: inset 0 3px 0 rgb(0 0 0 / 0.08);
+  box-shadow: var(--field-shadow, inset 0 3px 0 rgb(0 0 0 / 0.08));
 }
 
 .input::placeholder {
-  color: #6d685e;
+  color: var(--field-placeholder, #6d685e);
 }
 
 .input:focus-visible {

@@ -1,3 +1,4 @@
+import { ChevronRight, Search } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type Ref } from 'react';
 import { flushSync } from 'react-dom';
 import {
@@ -28,6 +29,7 @@ interface SetPickerProps {
   /** Set by the page, e.g. "Pick a set first." */
   error?: string;
   mySets?: SetSummary[];
+  workspace?: boolean;
   inputRef?: Ref<HTMLInputElement>;
 }
 
@@ -37,7 +39,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : 'S
  * Finds a 7TV set by channel name (listing that channel's sets) or by a pasted
  * set link. One field takes either, so the two can be mixed freely.
  */
-export function SetPicker({ label, selected, onSelect, initialQuery = '', error, mySets, inputRef }: SetPickerProps) {
+export function SetPicker({ label, selected, onSelect, initialQuery = '', error, mySets, workspace, inputRef }: SetPickerProps) {
   const [query, setQuery] = useState(initialQuery);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [problem, setProblem] = useState<string>();
@@ -96,7 +98,7 @@ export function SetPicker({ label, selected, onSelect, initialQuery = '', error,
     void find(query);
   };
 
-  if (selected) {
+  if (selected && !workspace) {
     return (
       <div className={styles.chosen}>
         <div className={styles.chosenText}>
@@ -119,31 +121,50 @@ export function SetPicker({ label, selected, onSelect, initialQuery = '', error,
     phase.kind === 'list' || (phase.kind === 'loading' && phase.channel && phase.sets)
       ? { channel: phase.channel!, sets: phase.sets! }
       : null;
-  const choices = list?.sets ?? mySets;
-
-  return (
-    <div className={styles.picker}>
-      <form className={styles.search} onSubmit={submit} noValidate>
-        <DeckField
-          label={label}
-          placeholder="channel or 7tv.app/emote-sets/…"
-          value={query}
-          onChange={(value) => {
-            setQuery(value);
-            setProblem(undefined);
-          }}
-          error={problem ?? error}
-          inputRef={inputRef}
-        />
+  const found = list?.sets ?? mySets ?? [];
+  const choices = workspace && selected && found.length === 0
+    ? [{ id: selected.id, name: selected.name, active: false }]
+    : found;
+  const listLabel = list ? `${list.channel}’s sets on 7TV` : mySets?.length ? 'Your 7TV sets' : 'Selected set';
+  const search = (
+    <form className={styles.search} onSubmit={submit} noValidate>
+      <DeckField
+        label={label}
+        placeholder={workspace ? 'Channel name or set link' : 'channel or 7tv.app/emote-sets/…'}
+        value={query}
+        onChange={(value) => {
+          setQuery(value);
+          setProblem(undefined);
+        }}
+        error={problem ?? error}
+        inputRef={inputRef}
+      />
+      {workspace ? (
+        <button
+          className={styles.searchButton}
+          type="submit"
+          aria-label="Find"
+          disabled={phase.kind === 'searching'}
+          aria-busy={phase.kind === 'searching' || undefined}
+        >
+          <Search size={18} aria-hidden="true" />
+        </button>
+      ) : (
         <GunmetalKey type="submit" className={styles.find} busy={phase.kind === 'searching'}>
           {phase.kind === 'searching' ? 'Finding…' : 'Find'}
         </GunmetalKey>
-      </form>
+      )}
+    </form>
+  );
 
-      {choices && choices.length > 0 && (
+  return (
+    <div className={workspace ? `${styles.picker} ${styles.workspace}` : styles.picker}>
+      {!workspace && search}
+
+      {choices.length > 0 && (
         <div className={styles.results}>
           <div className={styles.resultsHeader}>
-            <p className={styles.resultsHeading}>{list ? `${list.channel}’s sets on 7TV` : 'Your 7TV sets'}</p>
+            <p className={styles.resultsHeading}>{listLabel}</p>
             {list && Boolean(mySets?.length) && (
               <button
                 type="button"
@@ -159,7 +180,7 @@ export function SetPicker({ label, selected, onSelect, initialQuery = '', error,
               </button>
             )}
           </div>
-          <ul className={styles.sets} aria-label={list ? `${list.channel}’s sets` : 'Your 7TV sets'}>
+          <ul className={styles.sets} aria-label={listLabel}>
             {choices.map((set) => {
               const loading = phase.kind === 'loading' && phase.id === set.id;
               return (
@@ -168,13 +189,17 @@ export function SetPicker({ label, selected, onSelect, initialQuery = '', error,
                     type="button"
                     className={styles.set}
                     aria-label={set.active ? `${set.name}, active` : undefined}
+                    aria-pressed={workspace ? selected?.id === set.id : undefined}
                     aria-busy={loading || undefined}
-                    onClick={() => void load(set.id, list ?? undefined)}
+                    onClick={() => {
+                      if (set.id !== selected?.id) void load(set.id, list ?? undefined);
+                    }}
                   >
                     <span className={styles.lamp} data-on={set.active || undefined} aria-hidden="true" />
                     <span className={styles.setName}>{set.name}</span>
                     {set.active && <span className={styles.setNote}>active</span>}
                     {loading && <span className={styles.setNote}>loading…</span>}
+                    {workspace && <ChevronRight className={styles.selectIcon} size={16} aria-hidden="true" />}
                   </button>
                 </li>
               );
@@ -182,6 +207,7 @@ export function SetPicker({ label, selected, onSelect, initialQuery = '', error,
           </ul>
         </div>
       )}
+      {workspace && search}
     </div>
   );
 }

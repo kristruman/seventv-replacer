@@ -82,3 +82,64 @@
 .row[data-off] .alias {
   opacity: 0.45;
 }
+
+.workspace .toolbar {
+  gap: 6px 12px;
+}
+
+.workspace .count,
+.workspace .bulk {
+  font: 550 13px/1.4 var(--field-font);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.workspace .bulk {
+  padding: 5px 0;
+  color: var(--accent);
+}
+
+.workspace .list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 265px), 1fr));
+  gap: 0 16px;
+}
+
+.workspace .row {
+  gap: 9px;
+  padding: 6px 0;
+}
+
+.workspace .pair {
+  grid-template-columns: 40px auto 40px;
+  padding: 0;
+  gap: 5px;
+}
+
+.workspace .pair a {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--interactive);
+  box-shadow: none;
+}
+
+.workspace .pair a::before,
+.workspace .pair a::after {
+  display: none;
+}
+
+.workspace .pair img {
+  width: 78%;
+  height: 78%;
+}
+
+.workspace .alias {
+  font: 500 13px/1.35 var(--field-font);
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 701px) {
+  .workspace .list {
+    max-height: 320px;
+    overflow: auto;
+  }
+}

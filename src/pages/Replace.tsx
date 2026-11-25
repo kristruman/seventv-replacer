@@ -1,3 +1,4 @@
+import { ArrowRight, ChevronDown, ExternalLink, Layers, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useSearchParams } from 'react-router';
@@ -8,14 +9,9 @@ import { fetchPreset, reportBroken } from '../api';
 import { ProblemList } from '../components/ProblemList';
 import { SeasonalAlternatives } from '../components/SeasonalAlternatives';
 import { SetPicker } from '../components/SetPicker';
-import { ActionKey } from '../design/ActionKey';
-import { AmberScreen } from '../design/AmberScreen';
 import { DeckField } from '../design/DeckField';
 import { GunmetalKey } from '../design/GunmetalKey';
-import { Knob } from '../design/Knob';
 import { Notice } from '../design/Notice';
-import { SiteFooter } from '../design/SiteFooter';
-import { SiteHeader } from '../design/SiteHeader';
 import { SwapList } from '../design/SwapList';
 import { fixProblem, recordFix } from '../lib/problems';
 import { executeRun, planSwaps, swapKey, type RunMode, type RunProblem, type RunRecord, type RunReport } from '../lib/run';
@@ -37,14 +33,18 @@ import {
 } from '../lib/storage';
 import { undoRun, type UndoReport } from '../lib/undo';
 import styles from './Workbench.module.css';
+import ui from './ReplaceWorkspace.module.css';
 
 const SEASON_OPTIONS = SEASONS.map((s) => ({ value: s, label: seasonLabel(s) }));
 
-const MODE_OPTIONS: { value: RunMode; label: string }[] = [
-  { value: 'duplicate', label: 'Duplicate' },
-  { value: 'in-place', label: 'In place' },
-  { value: 'revert', label: 'Revert' },
-];
+const OPERATIONS = {
+  'seasonal-copy': { label: 'Seasonal copy', action: 'Create seasonal copy' },
+  copy: { label: 'Duplicate as-is', action: 'Copy set' },
+  'in-place': { label: 'Replace in place', action: 'Apply swaps' },
+  revert: { label: 'Revert seasonal swaps', action: 'Revert swaps' },
+} as const;
+
+type Operation = keyof typeof OPERATIONS;
 
 const MODE_NAMES: Record<RunMode, string> = {
   duplicate: 'Duplicate + replace',
@@ -84,8 +84,10 @@ export function Replace() {
   const seasonParam = params.get('season');
 
   const [token, setToken] = useState(loadToken);
+  const [connectionOpen, setConnectionOpen] = useState(false);
   const [tokenError, setTokenError] = useState<string>();
   const tokenInput = useRef<HTMLInputElement>(null);
+  const connectionButton = useRef<HTMLButtonElement>(null);
   const [accountResult, setAccountResult] = useState<AccountSets>();
   const [accountAttempt, setAccountAttempt] = useState(0);
 
@@ -94,8 +96,7 @@ export function Replace() {
   const setInput = useRef<HTMLInputElement>(null);
 
   const [season, setSeason] = useState<SeasonId>(() => (isSeasonId(seasonParam) ? seasonParam : currentSeason(new Date())));
-  const [mode, setMode] = useState<RunMode>('duplicate');
-  const [skipSwaps, setSkipSwaps] = useState(false);
+  const [operation, setOperation] = useState<Operation>('seasonal-copy');
   const [personalEdits, setPersonalEdits] = useState<Partial<Record<SeasonId, Record<string, string | null>>>>({});
   const [presets, setPresets] = useState<Partial<Record<SeasonId, Loaded<MappingRow[]>>>>({});
   const [unticked, setUnticked] = useState<Set<string>>(() => new Set());
@@ -124,7 +125,8 @@ export function Replace() {
   const label = seasonLabel(season);
   const running = runState.kind === 'running';
   const preset = presets[season];
-  const copyOnly = mode === 'duplicate' && skipSwaps;
+  const copyOnly = operation === 'copy';
+  const mode: RunMode = operation === 'seasonal-copy' || copyOnly ? 'duplicate' : operation;
   const account = accountResult?.token === token ? accountResult : undefined;
   const mySets = token && account && 'sets' in account ? account.sets : undefined;
 
@@ -222,12 +224,23 @@ export function Replace() {
     setTokenError(undefined);
   };
 
-  const needToken = () => {
-    flushSync(() => setTokenError('Paste your 7TV token first.'));
+  const openConnection = (error?: string) => {
+    flushSync(() => {
+      setConnectionOpen(true);
+      setTokenError(error);
+    });
     tokenInput.current?.focus();
   };
 
+  const needToken = () => openConnection('Paste your 7TV token first.');
+
+  const closeConnection = () => {
+    setConnectionOpen(false);
+    connectionButton.current?.focus();
+  };
+
   const run = async () => {
+    if (running) return;
     if (!token) return needToken();
     if (!set) {
       flushSync(() => setSetError('Pick a set first.'));
@@ -380,110 +393,166 @@ export function Replace() {
   };
 
   return (
-    <>
-      <SiteHeader />
-      <main className={`${styles.main} ${styles.replace}`}>
-        <h1 className={styles.heading}>Manage emote sets</h1>
-
-        <div className={styles.replaceSetup}>
-          <section className={styles.step} aria-labelledby="set-heading">
-            <h2 id="set-heading" className={styles.stepHeading}>Source set</h2>
-            <SetPicker
-              label="Channel name or 7TV set link"
-              selected={set}
-              onSelect={(next) => {
-                setSet(next);
-                setSetError(undefined);
-                setNewName(undefined);
-                if (runState.kind !== 'running') setRunState({ kind: 'idle' });
+    <div className={ui.shell}>
+      <header className={ui.topbar}>
+        <div className={ui.topbarInner}>
+          <Link className={ui.brand} to="/" aria-label="Seasonal Emote Replacer home">
+            <span className={ui.brandIcon}><Layers size={19} aria-hidden="true" /></span>
+            Seasonal Emote Replacer
+          </Link>
+          <nav className={ui.nav} aria-label="Main">
+            <Link to="/compare">Compare sets</Link>
+            <button
+              type="button"
+              className={ui.connection}
+              aria-expanded={connectionOpen}
+              aria-controls={connectionOpen ? 'connection-settings' : undefined}
+              ref={connectionButton}
+              onClick={() => connectionOpen ? closeConnection() : openConnection()}
+            >
+              <span className={ui.connectionDot} data-connected={Boolean(mySets)} aria-hidden="true" />
+              {mySets ? '7TV connected' : token ? '7TV connection' : 'Connect 7TV'}
+              <ChevronDown size={14} aria-hidden="true" />
+            </button>
+          </nav>
+          {connectionOpen && (
+            <section
+              id="connection-settings"
+              className={ui.connectionPanel}
+              aria-label="7TV connection settings"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') closeConnection();
               }}
-              initialQuery={channel}
-              mySets={mySets}
-              error={setError}
-              inputRef={setInput}
-            />
-          </section>
-
-          <section className={`${styles.step} ${styles.replaceToken}`} aria-label="7TV access">
-            <div className={styles.tokenRow}>
+            >
+              <div className={ui.connectionHeading}><ShieldCheck size={17} aria-hidden="true" /> 7TV connection</div>
               <DeckField
                 label="7TV token"
                 type="password"
-                placeholder="Paste your 7TV token"
+                placeholder="Paste your token"
                 value={token}
                 onChange={onToken}
                 error={tokenError}
+                hint="Stored in this browser and sent directly to 7TV."
                 inputRef={tokenInput}
               />
-              {token && (
-                <GunmetalKey size="small" className={styles.tokenForget} onClick={() => onToken('')}>
-                  Forget token
-                </GunmetalKey>
-              )}
-            </div>
-            <p className={styles.stepLede}>
-              <Link to="/guide/token">Find your token</Link> · Stored in this browser
-            </p>
-            {token && (
-              <div className={styles.stepLede} aria-live="polite">
-                {!account && 'Loading your 7TV sets…'}
-                {account && 'error' in account && (
-                  <>
-                    {account.error}{' '}
-                    {account.retryable && (
-                      <button
-                        type="button"
-                        className={styles.textButton}
-                        onClick={() => {
-                          setAccountResult(undefined);
-                          setAccountAttempt((attempt) => attempt + 1);
-                        }}
-                      >
-                        Retry
-                      </button>
-                    )}
-                  </>
-                )}
-                {mySets?.length === 0 && 'Your 7TV account has no channel emote sets yet.'}
+              <div className={ui.connectionActions}>
+                <Link to="/guide/token">Find your token <ExternalLink size={13} aria-hidden="true" /></Link>
+                {token && <button type="button" className={ui.secondaryButton} onClick={() => onToken('')}>Forget token</button>}
               </div>
-            )}
-          </section>
+            </section>
+          )}
         </div>
+      </header>
 
-        <section className={styles.step} aria-labelledby="dial-heading">
-          <h2 id="dial-heading" className={styles.stepHeading}>Copy or swap options</h2>
-          <div className={styles.replaceSetup}>
-            <div className={styles.console}>
-              <Knob<SeasonId> compact label="Season" options={SEASON_OPTIONS} value={season} onChange={setSeason} />
-              <Knob<RunMode> compact label="Mode" options={MODE_OPTIONS} value={mode} onChange={setMode} />
-              {mode === 'revert' && (
-                <p className={styles.consoleNote}>Applies the {label} preset in reverse.</p>
+      <main className={ui.main}>
+        <h1>Emote sets</h1>
+
+        <div className={ui.workspace}>
+          <aside className={ui.sidebar} aria-labelledby="set-heading">
+            <h2 id="set-heading"><Layers size={17} aria-hidden="true" /> Source set</h2>
+            <fieldset className={ui.fieldset} disabled={running}>
+              <SetPicker
+                workspace
+                label="Find a set"
+                selected={set}
+                onSelect={(next) => {
+                  if (activeRun.current) return;
+                  setSet(next);
+                  setSetError(undefined);
+                  setNewName(undefined);
+                  setRunState({ kind: 'idle' });
+                }}
+                initialQuery={channel}
+                mySets={mySets}
+                error={setError}
+                inputRef={setInput}
+              />
+            </fieldset>
+            <div className={ui.accountStatus} aria-live="polite">
+              {!token && (
+                <button type="button" className={ui.inlineButton} onClick={() => openConnection()}>
+                  Connect to see your sets
+                </button>
               )}
+              {token && !account && 'Loading your 7TV sets…'}
+              {account && 'error' in account && (
+                <>
+                  {account.error}{' '}
+                  {account.retryable && (
+                    <button
+                      type="button"
+                      className={ui.inlineButton}
+                      onClick={() => {
+                        setAccountResult(undefined);
+                        setAccountAttempt((attempt) => attempt + 1);
+                      }}
+                    >
+                      Retry
+                    </button>
+                  )}
+                </>
+              )}
+              {mySets?.length === 0 && 'Your account has no channel emote sets yet.'}
             </div>
+          </aside>
 
-            {mode === 'in-place' && (
-              <p className={styles.plate}>
-                <strong>This changes your set directly.</strong> Revert uses the {label} preset in reverse and may not
-                restore every emote exactly. Undo restores it exactly, but only from this browser.
-              </p>
-            )}
+          <div className={ui.editor}>
+            {set && (
+              <>
+                <header className={ui.selection}>
+                  <span className={ui.selectionIcon}><Layers size={22} aria-hidden="true" /></span>
+                  <div className={ui.selectionText}>
+                    <h2>{set.name}</h2>
+                    <p>{plural(set.emotes.length, 'emote', 'emotes')}</p>
+                  </div>
+                  <a className={ui.viewSet} href={seventvSetUrl(set.id)} target="_blank" rel="noreferrer">
+                    View on 7TV <ExternalLink size={14} aria-hidden="true" />
+                  </a>
+                </header>
 
-            {mode === 'duplicate' && (
-              <div className={styles.target}>
-                <label className={styles.copyOnly}>
-                  <input
-                    type="checkbox"
-                    checked={copyOnly}
-                    disabled={running}
-                    onChange={(event) => {
-                      setSkipSwaps(event.target.checked);
-                      if (runState.kind !== 'idle') setRunState({ kind: 'idle' });
-                    }}
-                  />
-                  Copy only
-                </label>
-                {targetKind === 'new' ? (
-                  <>
+                <fieldset className={ui.options} disabled={running}>
+                  <legend><SlidersHorizontal size={16} aria-hidden="true" /> Set options</legend>
+                  <div className={ui.selectGrid}>
+                    <label>
+                      Operation
+                      <select value={operation} onChange={(event) => {
+                        setOperation(event.target.value as Operation);
+                        setRunState({ kind: 'idle' });
+                      }}>
+                        {Object.entries(OPERATIONS).map(([value, option]) => (
+                          <option key={value} value={value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {!copyOnly && (
+                      <label>
+                        Season
+                        <select value={season} onChange={(event) => setSeason(event.target.value as SeasonId)}>
+                          {SEASON_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </label>
+                    )}
+                    {mode === 'duplicate' && (
+                      <label>
+                        Destination
+                        <select value={targetKind} onChange={(event) => {
+                          setTargetKind(event.target.value as 'new' | 'existing');
+                          setTargetError(undefined);
+                        }}>
+                          <option value="new">New set</option>
+                          <option value="existing">Existing set</option>
+                        </select>
+                      </label>
+                    )}
+                  </div>
+
+                  {mode !== 'duplicate' && (
+                    <p className={ui.callout}>
+                      This edits the source set. Recent runs can be undone from this browser.
+                    </p>
+                  )}
+
+                  {mode === 'duplicate' && (targetKind === 'new' ? (
                     <DeckField
                       label="Name of the new set"
                       value={copyName}
@@ -492,118 +561,110 @@ export function Replace() {
                         setTargetError(undefined);
                       }}
                       error={targetError}
-                      placeholder="e.g. Main (Halloween)"
                     />
-                    <button type="button" className={styles.textButton} onClick={() => setTargetKind('existing')}>
-                      Fill an existing empty set instead
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <SetPicker
-                      label="Set to fill"
-                      selected={existingTarget}
-                      onSelect={(next) => {
-                        setExistingTarget(next);
-                        setTargetError(undefined);
-                      }}
-                      initialQuery={channel}
-                      mySets={mySets}
-                      error={targetError}
-                    />
-                    {existingTarget && existingTarget.emotes.length > 0 && (
-                      <p className={styles.note}>
-                        “{existingTarget.name}” already holds {plural(existingTarget.emotes.length, 'emote', 'emotes')}.
-                        7TV will refuse any that are already in it.
-                      </p>
-                    )}
-                    <button type="button" className={styles.textButton} onClick={() => setTargetKind('new')}>
-                      Make a new set instead
-                    </button>
-                  </>
-                )}
-              </div>
+                  ) : (
+                    <>
+                      <SetPicker
+                        label="Set to fill"
+                        selected={existingTarget}
+                        onSelect={(next) => {
+                          setExistingTarget(next);
+                          setTargetError(undefined);
+                        }}
+                        mySets={mySets?.filter((choice) => choice.id !== set.id)}
+                        error={targetError}
+                      />
+                      {existingTarget && existingTarget.emotes.length > 0 && (
+                        <p className={ui.callout}>
+                          “{existingTarget.name}” already has {plural(existingTarget.emotes.length, 'emote', 'emotes')}. Only new entries will be added.
+                        </p>
+                      )}
+                    </>
+                  ))}
+                </fieldset>
+              </>
             )}
-          </div>
-        </section>
 
-        <section className={styles.step} aria-labelledby="preview-heading">
-          <h2 id="preview-heading" className={styles.stepHeading}>
-            {copyOnly ? 'Check the copy' : 'Check the swaps'}
-          </h2>
-          {!set && <p className={styles.stepLede}>Pick a set above to see every swap before anything changes.</p>}
-          {set && copyOnly && (
-            <p className={styles.stepLede}>
-              Copy {plural(set.emotes.length, 'emote', 'emotes')} with their current chat names.
-            </p>
-          )}
-          {set && !copyOnly && preset === 'failed' && (
-            <p className={styles.plate}>
-              <strong>The {label} preset didn’t load.</strong> Reload the page to try again.
-            </p>
-          )}
-          {set && !copyOnly && preset === 'loading' && <p className={styles.stepLede}>Loading the {label} preset…</p>}
-          {plan && !copyOnly && (
-            <>
-              <p className={styles.stepLede}>
-                {plan.unmapped > 0 &&
-                  (mode === 'revert'
-                    ? `${plural(plan.unmapped, 'emote has', 'emotes have')} no normal version in the ${label} preset. `
-                    : `${plural(plan.unmapped, 'emote has', 'emotes have')} no ${label} version yet. `)}
-                {plan.alreadyThere > 0 &&
-                  `${plural(plan.alreadyThere, 'swap is', 'swaps are')} left out because the other version is already in the set. `}
-                {mode === 'duplicate' && plan.swaps.length > 0 && 'Unticked emotes are copied unchanged.'}
-              </p>
-              {plan.swaps.length > 0 ? (
-                <SwapList
-                  label="Swaps"
-                  items={plan.swaps.map((s) => ({ key: swapKey(s.fromId, s.alias), alias: s.alias, fromId: s.fromId, toId: s.toId }))}
-                  unticked={unticked}
-                  onChange={setUnticked}
-                />
-              ) : (
-                <p className={styles.plate}>
-                  <strong>Nothing to swap in this set.</strong>{' '}
-                  {mode === 'revert'
-                    ? `None of its emotes are ${label} versions the preset knows.`
-                    : `None of its emotes have a ${label} version in the preset yet.`}
+            <section className={set ? ui.preview : ui.emptyPreview} aria-labelledby="preview-heading">
+              {!set && <span className={ui.emptyIcon}><Layers size={30} strokeWidth={1.5} aria-hidden="true" /></span>}
+              <h2 id="preview-heading">{set ? (copyOnly ? 'Copy preview' : 'Swap preview') : 'Choose a source set'}</h2>
+              {!set && <p>Select one of your sets or paste a link to preview a copy or seasonal swaps.</p>}
+              {set && copyOnly && (
+                <p className={ui.previewNote}>
+                  Copy {plural(set.emotes.length, 'emote', 'emotes')} with their current chat names.
                 </p>
               )}
-            </>
-          )}
-          {set && plan && mode === 'duplicate' && !copyOnly && !running && set.emotes.length > 0 && (
-            <SeasonalAlternatives
-              key={`${set.id}:${season}`}
-              emotes={set.emotes}
-              season={season}
-              saved={personal}
-              swaps={plan.swaps}
-              onChoose={(originalId, replacementId) => {
-                savePersonalMapping(season, originalId, replacementId);
-                setPersonalEdits((current) => ({
-                  ...current,
-                  [season]: { ...current[season], [originalId]: replacementId },
-                }));
-                setUnticked((current) => {
-                  const next = new Set(current);
-                  for (const emote of set.emotes) {
-                    if (emote.id === originalId) next.delete(swapKey(emote.id, emote.alias));
-                  }
-                  return next;
-                });
-              }}
-            />
-          )}
-        </section>
+              {set && !copyOnly && preset === 'failed' && (
+                <p className={ui.callout}>
+                  <strong>The {label} preset didn’t load.</strong> Reload the page to try again.
+                </p>
+              )}
+              {set && !copyOnly && preset === 'loading' && <p className={ui.previewNote}>Loading the {label} preset…</p>}
+              {plan && !copyOnly && (
+                <>
+                  <p className={ui.previewNote}>
+                    {plan.unmapped > 0 &&
+                      (mode === 'revert'
+                        ? `${plural(plan.unmapped, 'emote has', 'emotes have')} no normal version in the ${label} preset. `
+                        : `${plural(plan.unmapped, 'emote has', 'emotes have')} no ${label} version yet. `)}
+                    {plan.alreadyThere > 0 &&
+                      `${plural(plan.alreadyThere, 'swap is', 'swaps are')} left out because the other version is already in the set. `}
+                    {mode === 'duplicate' && plan.swaps.length > 0 && 'Unselected emotes are copied as-is.'}
+                  </p>
+                  {plan.swaps.length > 0 ? (
+                    <SwapList
+                      workspace
+                      label="Swaps"
+                      items={plan.swaps.map((s) => ({ key: swapKey(s.fromId, s.alias), alias: s.alias, fromId: s.fromId, toId: s.toId }))}
+                      unticked={unticked}
+                      onChange={setUnticked}
+                    />
+                  ) : (
+                    <p className={ui.callout}>
+                      <strong>Nothing to swap in this set.</strong>{' '}
+                      {mode === 'revert'
+                        ? `None of its emotes are ${label} versions the preset knows.`
+                        : `None of its emotes have a ${label} version in the preset yet.`}
+                    </p>
+                  )}
+                </>
+              )}
+              {set && plan && mode === 'duplicate' && !copyOnly && !running && set.emotes.length > 0 && (
+                <SeasonalAlternatives
+                  key={`${set.id}:${season}`}
+                  emotes={set.emotes}
+                  season={season}
+                  saved={personal}
+                  swaps={plan.swaps}
+                  onChoose={(originalId, replacementId) => {
+                    savePersonalMapping(season, originalId, replacementId);
+                    setPersonalEdits((current) => ({
+                      ...current,
+                      [season]: { ...current[season], [originalId]: replacementId },
+                    }));
+                    setUnticked((current) => {
+                      const next = new Set(current);
+                      for (const emote of set.emotes) {
+                        if (emote.id === originalId) next.delete(swapKey(emote.id, emote.alias));
+                      }
+                      return next;
+                    });
+                  }}
+                />
+              )}
+            </section>
 
-        <section className={styles.runBar} aria-label="Run">
-          <AmberScreen className={styles.runScreen} busy={running}>
-            {readout}
-          </AmberScreen>
-          <ActionKey className={styles.runKey} onClick={() => void run()} busy={running}>
-            {copyOnly ? 'Copy set' : mode === 'revert' ? 'Revert' : 'Make seasonal'}
-          </ActionKey>
-        </section>
+            {set && (
+              <section className={ui.runBar} aria-label="Run">
+                <span role="status" className={ui.runStatus}>{readout}</span>
+                <button type="button" className={ui.primaryButton} disabled={running || !plan} onClick={() => void run()}>
+                  {running ? (mode === 'duplicate' ? 'Copying…' : 'Applying…') : OPERATIONS[operation].action}
+                  <ArrowRight size={16} aria-hidden="true" />
+                </button>
+              </section>
+            )}
+          </div>
+        </div>
 
         {runState.kind === 'failed' && (
           <p className={styles.plate} role="alert">
@@ -645,8 +706,12 @@ export function Replace() {
         )}
       </main>
       <Notice message={notice} onDone={clearNotice} />
-      <SiteFooter />
-    </>
+      <footer className={ui.footer}>
+        <a href="https://github.com/kristruman/seventv-replacer">Source on GitHub</a>
+        <a href="https://twitch.tv/niena">Originally made by niena</a>
+        <p>Independent of 7TV</p>
+      </footer>
+    </div>
   );
 }
 

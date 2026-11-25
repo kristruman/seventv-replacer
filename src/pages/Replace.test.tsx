@@ -29,6 +29,11 @@ async function pickMain() {
   await screen.findByRole('list', { name: 'Swaps' });
 }
 
+async function openTokenField() {
+  await userEvent.click(screen.getByRole('button', { name: /^(Connect 7TV|7TV connect)/i }));
+  return screen.getByLabelText('7TV token', { exact: true });
+}
+
 describe('Replace', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -37,8 +42,8 @@ describe('Replace', () => {
 
   it('picks up the channel and season from the landing page', async () => {
     renderAt('/replace?channel=niena&season=winter');
-    expect(screen.getByRole('radio', { name: 'Winter' })).toBeChecked();
-    expect(await screen.findByRole('button', { name: /Main/ })).toBeInTheDocument();
+    await pickMain();
+    expect(screen.getByRole('combobox', { name: 'Season' })).toHaveValue('winter');
     expect(screen.getByText('niena’s sets on 7TV')).toBeInTheDocument();
   });
 
@@ -71,8 +76,9 @@ describe('Replace', () => {
     await userEvent.click(choices[0]!);
     await screen.findByRole('list', { name: 'Swaps' });
     expect(mutations).toEqual([]);
-    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+    expect(choices[0]).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('list', { name: 'Your 7TV sets' })).toBeInTheDocument();
+    await openTokenField();
     await userEvent.click(screen.getByRole('button', { name: 'Forget token' }));
     expect(screen.queryByRole('list', { name: 'Your 7TV sets' })).not.toBeInTheDocument();
   });
@@ -90,7 +96,7 @@ describe('Replace', () => {
       '/api/presets/': () => preset('winter'),
     });
     renderAt('/replace?season=winter');
-    await userEvent.click(screen.getByLabelText('7TV token', { exact: true }));
+    await userEvent.click(await openTokenField());
     await userEvent.paste('Bearer pasted-token');
     const list = await screen.findByRole('list', { name: 'Your 7TV sets' });
     expect(within(list).getByRole('button', { name: 'Editor set, active' })).toBeInTheDocument();
@@ -106,7 +112,7 @@ describe('Replace', () => {
     });
     renderAt('/replace?season=winter');
     expect(await screen.findByText(/paste a fresh token/i)).toBeInTheDocument();
-    const setInput = screen.getByLabelText('Channel name or 7TV set link');
+    const setInput = screen.getByLabelText('Find a set');
     await userEvent.click(setInput);
     await userEvent.paste(`https://7tv.app/emote-sets/${SET_ID}`);
     await userEvent.click(screen.getByRole('button', { name: 'Find' }));
@@ -128,7 +134,7 @@ describe('Replace', () => {
   it('asks for the token before running', async () => {
     renderAt('/replace?channel=niena');
     await pickMain();
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
     expect(screen.getByLabelText('7TV token', { exact: true })).toHaveFocus();
     expect(screen.getByText('Paste your 7TV token first.')).toBeInTheDocument();
     expect(mutations).toEqual([]);
@@ -149,7 +155,7 @@ describe('Replace', () => {
     renderAt('/replace?channel=niena&season=winter');
     await userEvent.click(await screen.findByRole('button', { name: /Main/ }));
     await screen.findByText(/Winter preset didn’t load/);
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Copy only' }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Operation' }), 'copy');
     expect(screen.getByLabelText('Name of the new set')).toHaveValue('Main (Copy)');
     await userEvent.click(screen.getByRole('button', { name: 'Copy set' }));
     expect(await screen.findByText(/3 emotes copied to “Main \(Copy\)”/)).toBeInTheDocument();
@@ -193,28 +199,25 @@ describe('Replace', () => {
     renderAt('/replace?channel=niena&season=winter');
     await pickMain();
     expect(screen.getByRole('checkbox', { name: 'KEKW' })).toBeChecked();
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
     await screen.findByRole('heading', { name: 'Run finished' });
     expect(mutations).toContainEqual({ id: 'NEW', action: 'ADD', emote_id: winterKekw, name: 'KEKW' });
   });
 
   it('warns before replacing in place', async () => {
-    renderAt('/replace?season=halloween');
-    await userEvent.click(screen.getByRole('radio', { name: 'In place' }));
-    expect(
-      screen.getByText(
-        /Revert uses the Halloween preset in reverse and may not restore every emote exactly\. Undo restores it exactly, but only from this browser\./,
-      ),
-    ).toBeInTheDocument();
+    renderAt('/replace?channel=niena&season=halloween');
+    await pickMain();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Operation' }), 'in-place');
+    expect(screen.getByText(/this edits the source set/i)).toBeInTheDocument();
   });
 
   it('swaps in place keeping aliases, then offers Undo for the run', async () => {
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'tok');
+    await userEvent.type(await openTokenField(), 'tok');
     await pickMain();
-    await userEvent.click(screen.getByRole('radio', { name: 'In place' }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Operation' }), 'in-place');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Sadge' }));
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
 
     await screen.findByRole('heading', { name: 'Run finished' }, { timeout: 4000 });
     expect(mutations).toEqual([
@@ -229,11 +232,11 @@ describe('Replace', () => {
 
   it('undoes a run, skipping nothing when the set is as the run left it', async () => {
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'tok');
+    await userEvent.type(await openTokenField(), 'tok');
     await pickMain();
-    await userEvent.click(screen.getByRole('radio', { name: 'In place' }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Operation' }), 'in-place');
     await userEvent.click(screen.getByRole('checkbox', { name: 'Sadge' }));
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
     await screen.findByRole('heading', { name: 'Run finished' }, { timeout: 4000 });
 
     sets[SET_ID]!.emotes = [['peepoHappy', A2], ['Sadge', B], ['KEKW', X]];
@@ -259,9 +262,9 @@ describe('Replace', () => {
       '/api/presets/': (url) => preset(url.split('/').pop()!),
     });
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'old');
+    await userEvent.type(await openTokenField(), 'old');
     await pickMain();
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Log out of 7tv.app and log back in');
   });
 
@@ -275,9 +278,9 @@ describe('Replace', () => {
       '/api/presets/': (url) => preset(url.split('/').pop()!),
     });
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'tok');
+    await userEvent.type(await openTokenField(), 'tok');
     await pickMain();
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
 
     await screen.findByRole('heading', { name: 'Run finished' }, { timeout: 4000 });
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
@@ -307,10 +310,10 @@ describe('Replace', () => {
       '/api/presets/': (url) => preset(url.split('/').pop()!),
     });
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'tok');
+    await userEvent.type(await openTokenField(), 'tok');
     await pickMain();
-    await userEvent.click(screen.getByRole('radio', { name: 'In place' }));
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Operation' }), 'in-place');
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
 
     const problems = await screen.findByRole('region', { name: 'Problems' }, { timeout: 4000 });
     // 7TV took neither version under "a,b": the set is short it until the fix.
@@ -339,9 +342,9 @@ describe('Replace', () => {
       '/api/presets/': (url) => preset(url.split('/').pop()!),
     });
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'tok');
+    await userEvent.type(await openTokenField(), 'tok');
     await pickMain();
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
     await screen.findByRole('heading', { name: 'Run finished' }, { timeout: 4000 });
 
     expect(reports).toEqual([{ season: 'halloween', originalId: A, replacementId: A2, brokenId: A2, reason: 'Unknown Emote' }]);
@@ -382,10 +385,10 @@ describe('Replace', () => {
   it('keeps names with umlauts and accents as they are', async () => {
     sets[SET_ID]!.emotes = [['üäöéèà', A]];
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'tok');
+    await userEvent.type(await openTokenField(), 'tok');
     await pickMain();
-    await userEvent.click(screen.getByRole('radio', { name: 'In place' }));
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Operation' }), 'in-place');
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
     await screen.findByRole('heading', { name: 'Run finished' }, { timeout: 4000 });
     expect(mutations).toContainEqual({ id: SET_ID, action: 'ADD', emote_id: A2, name: 'üäöéèà' });
   });
@@ -393,10 +396,10 @@ describe('Replace', () => {
   it('estimates the time left once a few emotes are done', async () => {
     sets[SET_ID]!.emotes = Array.from({ length: 61 }, (_, i) => [`e${i}`, emoteId(i + 10, 'E')] as [string, string]);
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'tok');
+    await userEvent.type(await openTokenField(), 'tok');
     await userEvent.click(await screen.findByRole('button', { name: /Main/ }));
     await screen.findByText(/no Halloween version yet/);
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/Copying · \d+\/61 · under 1 min left/), {
       timeout: 4000,
     });
@@ -405,10 +408,10 @@ describe('Replace', () => {
   it('saves the run for Undo while it is still going', async () => {
     sets[SET_ID]!.emotes = Array.from({ length: 31 }, (_, i) => [`e${i}`, emoteId(i + 10, 'E')] as [string, string]);
     renderAt('/replace?channel=niena&season=halloween');
-    await userEvent.type(screen.getByLabelText('7TV token', { exact: true }), 'tok');
+    await userEvent.type(await openTokenField(), 'tok');
     await userEvent.click(await screen.findByRole('button', { name: /Main/ }));
     await screen.findByText(/no Halloween version yet/);
-    await userEvent.click(screen.getByRole('button', { name: /make seasonal/i }));
+    await userEvent.click(screen.getByRole('button', { name: /create seasonal copy|apply swaps/i }));
     // 30 emotes per request: halfway through, the first batch is in and the second isn't.
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/Copying · 30\/31/), { timeout: 4000 });
     expect(JSON.parse(localStorage.getItem('ser.runs')!)[0]).toMatchObject({ createdSet: true });

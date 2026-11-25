@@ -16,10 +16,11 @@ interface SwapListProps {
   unticked: ReadonlySet<string>;
   onChange(unticked: Set<string>): void;
   label: string;
+  workspace?: boolean;
 }
 
 /** Each emote beside the one that replaces it, all ticked, each untickable. */
-export function SwapList({ items, unticked, onChange, label }: SwapListProps) {
+export function SwapList({ items, unticked, onChange, label, workspace }: SwapListProps) {
   const ticked = items.length - items.filter((i) => unticked.has(i.key)).length;
   const toggle = (key: string, on: boolean) => {
     const next = new Set(unticked);
@@ -29,16 +30,16 @@ export function SwapList({ items, unticked, onChange, label }: SwapListProps) {
   };
 
   return (
-    <div className={styles.wrap}>
+    <div className={workspace ? `${styles.wrap} ${styles.workspace}` : styles.wrap}>
       <div className={styles.toolbar}>
         <p className={styles.count}>
-          {ticked} of {items.length} ticked
+          {ticked} of {items.length} selected
         </p>
         <button type="button" className={styles.bulk} onClick={() => onChange(new Set())}>
-          Tick all
+          Select all
         </button>
         <button type="button" className={styles.bulk} onClick={() => onChange(new Set(items.map((i) => i.key)))}>
-          Untick all
+          Clear selection
         </button>
       </div>
       <ul className={styles.list} aria-label={label}>

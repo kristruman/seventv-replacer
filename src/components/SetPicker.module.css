@@ -143,7 +143,7 @@
 .chosenMeta {
   margin: 2px 0 0;
   font-size: 14px;
-  color: #55524b;
+  color: var(--set-meta-color, #55524b);
 }
 
 @media (max-width: 640px) {
@@ -154,4 +154,102 @@
   .find {
     margin-top: var(--set-search-offset-small, 0);
   }
+}
+
+.workspace {
+  gap: 14px;
+}
+
+.workspace .search {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.workspace .searchButton {
+  display: grid;
+  place-items: center;
+  width: var(--deck-field-height, 42px);
+  height: var(--deck-field-height, 42px);
+  margin-top: calc(18px + var(--deck-field-gap, 6px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.workspace .searchButton:hover {
+  color: var(--ink);
+  background: var(--interactive);
+}
+
+.workspace .searchButton:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.workspace .results {
+  gap: 6px;
+}
+
+.workspace .resultsHeading {
+  font: 600 12px/1.5 var(--field-font);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.workspace .sets {
+  display: grid;
+  gap: 3px;
+  padding: 0;
+}
+
+.workspace .set {
+  width: 100%;
+  min-height: 43px;
+  padding: 7px 10px;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink);
+  background: transparent;
+  box-shadow: none;
+  font: 550 14px/1.35 var(--field-font);
+  letter-spacing: normal;
+}
+
+.workspace .set:hover,
+.workspace .set[aria-pressed='true'] {
+  border-color: var(--line);
+  background: var(--interactive);
+}
+
+.workspace .set[aria-pressed='true'] {
+  border-color: var(--accent-line);
+}
+
+.workspace .set:active,
+.workspace .set[aria-busy='true'] {
+  transform: none;
+}
+
+.workspace .lamp {
+  display: none;
+}
+
+.workspace .setNote {
+  padding: 2px 5px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  border-radius: 5px;
+  font-size: 10px;
+  letter-spacing: normal;
+  text-transform: capitalize;
+  opacity: 1;
+}
+
+.workspace .selectIcon {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
 }

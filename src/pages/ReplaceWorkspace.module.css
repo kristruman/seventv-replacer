@@ -1,0 +1,494 @@
+.shell {
+  --canvas: #101620;
+  --surface: #151e2b;
+  --raised: #1b2737;
+  --interactive: #213044;
+  --line: #2b394c;
+  --ink: #edf3fb;
+  --muted: #a7b6ca;
+  --accent: #8ee5cd;
+  --accent-wash: #203c3e;
+  --accent-line: #4a8f88;
+  --mat-line: var(--line);
+  --ink-soft: var(--muted);
+  --bone: var(--raised);
+  --bone-wall: var(--line);
+  --charcoal: var(--ink);
+  --putty: var(--interactive);
+  --putty-wall: var(--line);
+  --gunmetal: var(--raised);
+  --gunmetal-wall: var(--line);
+  --amber: var(--accent);
+  --font-mono: ui-sans-serif, system-ui, sans-serif;
+  --field-font: var(--font-mono);
+  --field-tracking: normal;
+  --field-case: none;
+  --field-surface: var(--canvas);
+  --field-border-color: var(--line);
+  --field-text: var(--ink);
+  --field-placeholder: var(--muted);
+  --field-radius: 8px;
+  --field-shadow: none;
+  --deck-field-height: 42px;
+  --deck-field-padding: 10px;
+  --deck-field-border: 1px;
+  --deck-field-font-size: 14px;
+  --deck-field-gap: 6px;
+  --set-picker-gap: 8px;
+  --set-chosen-padding: 10px 12px;
+  --set-chosen-font-size: 16px;
+  --set-meta-color: var(--muted);
+  --secondary-text: var(--ink);
+  --secondary-shadow: inset 0 0 0 1px var(--line);
+  --toast-background: var(--raised);
+  --toast-text: var(--ink);
+  --key-travel: 0px;
+  --key-wall-bone: none;
+  --key-wall-putty: none;
+  --workspace-gutter: clamp(14px, 4vw, 40px);
+  min-height: 100svh;
+  color-scheme: dark;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 400 14px/1.5 var(--field-font);
+}
+
+.topbar {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.topbarInner,
+.main,
+.footer {
+  width: min(100%, 1232px);
+  margin-inline: auto;
+  padding-inline: var(--workspace-gutter);
+}
+
+.topbarInner {
+  position: relative;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 18px;
+  padding-block: 10px;
+}
+
+.brand,
+.nav,
+.connection,
+.connectionHeading,
+.connectionActions,
+.connectionActions a,
+.sidebar h2,
+.viewSet,
+.options legend,
+.primaryButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brand {
+  font-size: 15px;
+  font-weight: 660;
+  text-decoration: none;
+}
+
+.brandIcon,
+.selectionIcon,
+.emptyIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--accent-line);
+  border-radius: 9px;
+  color: var(--accent);
+  background: var(--accent-wash);
+}
+
+.nav {
+  flex: none;
+  gap: 16px;
+}
+
+.nav a,
+.footer a,
+.viewSet,
+.connectionActions a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.nav a:hover,
+.footer a:hover,
+.viewSet:hover,
+.connectionActions a:hover {
+  color: var(--ink);
+}
+
+.connection,
+.secondaryButton {
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.connection:hover,
+.secondaryButton:hover {
+  background: var(--interactive);
+}
+
+.connectionDot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.connectionDot[data-connected='true'] {
+  background: var(--accent);
+}
+
+.connectionPanel {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: var(--workspace-gutter);
+  width: min(340px, calc(100% - var(--workspace-gutter) * 2));
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.32);
+}
+
+.connectionHeading {
+  font-weight: 650;
+}
+
+.connectionHeading svg {
+  color: var(--accent);
+}
+
+.connectionActions {
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.main {
+  display: grid;
+  gap: 20px;
+  padding-block: clamp(22px, 4vw, 48px) 32px;
+}
+
+.main h1 {
+  margin: 0;
+  font-size: clamp(25px, 3vw, 34px);
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  font-weight: 720;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(232px, 290px) minmax(0, 1fr);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-width: 0;
+  padding: 18px 15px;
+  border-right: 1px solid var(--line);
+}
+
+.sidebar h2,
+.preview h2,
+.emptyPreview h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 660;
+}
+
+.sidebar h2 svg {
+  color: var(--accent);
+}
+
+.fieldset,
+.options {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.accountStatus {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.accountStatus:empty,
+.previewNote:empty {
+  display: none;
+}
+
+.inlineButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 345px;
+}
+
+.selection,
+.options,
+.preview {
+  padding: clamp(14px, 2.3vw, 24px);
+}
+
+.selection {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.selectionIcon {
+  width: 42px;
+  height: 42px;
+}
+
+.selectionText {
+  min-width: 0;
+  flex: 1;
+}
+
+.selection h2 {
+  margin: 0;
+  font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.2;
+  font-weight: 660;
+  overflow-wrap: anywhere;
+}
+
+.selection p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.viewSet {
+  flex: none;
+  font-size: 12px;
+}
+
+.options {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  padding-top: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.options legend {
+  margin: 0;
+  padding: 14px 0 0;
+  font-weight: 650;
+}
+
+.options legend svg {
+  color: var(--muted);
+}
+
+.selectGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.selectGrid label {
+  display: grid;
+  flex: 1 1 126px;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.selectGrid label:first-child {
+  flex-basis: 180px;
+}
+
+.selectGrid select {
+  width: 100%;
+  height: 42px;
+  padding-inline: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 500 14px/1.4 var(--field-font);
+}
+
+.callout {
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  color: var(--muted);
+}
+
+.preview {
+  display: grid;
+  gap: 10px;
+  flex: 1;
+  align-content: start;
+}
+
+.previewNote,
+.emptyPreview p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.emptyPreview {
+  display: grid;
+  flex: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 28px 18px;
+  text-align: center;
+}
+
+.emptyIcon {
+  width: 58px;
+  height: 58px;
+  margin-bottom: 5px;
+  border-radius: 15px;
+}
+
+.emptyPreview h2 {
+  font-size: 20px;
+}
+
+.emptyPreview p {
+  max-width: 33ch;
+}
+
+.runBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 10px clamp(14px, 2.3vw, 24px);
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 14px 0;
+  background: var(--surface);
+}
+
+.runStatus {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.primaryButton {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #122c28;
+  font: 660 14px/1.3 var(--field-font);
+  cursor: pointer;
+}
+
+.primaryButton:hover {
+  background: #a8efdc;
+}
+
+.primaryButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding-block: 5px 24px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.footer p {
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .editor {
+    min-height: 220px;
+  }
+
+  .runBar {
+    border-bottom-left-radius: 14px;
+  }
+}
+
+@media (max-width: 440px) {
+  .topbarInner {
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    margin-right: auto;
+  }
+
+  .nav {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .viewSet {
+    max-width: 80px;
+  }
+}

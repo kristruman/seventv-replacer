@@ -9,8 +9,8 @@
   max-width: calc(100vw - 32px);
   padding: 12px 12px 12px 20px;
   border-radius: 12px;
-  background: var(--charcoal-deep);
-  color: var(--bone);
+  background: var(--toast-background, var(--charcoal-deep));
+  color: var(--toast-text, var(--bone));
   box-shadow: 0 12px 30px rgb(0 0 0 / 0.35);
   transform: translateX(-50%);
   animation: rise 220ms var(--ease-out);
