@@ -77,12 +77,6 @@ function timeLeft(ms: number): string {
 
 const when = (iso: string) => new Date(iso).toLocaleString('en', { dateStyle: 'medium', timeStyle: 'short' });
 
-function modeDescription(mode: RunMode, season: string): string {
-  if (mode === 'duplicate') return `Copies your set into a new one with the ${season} emotes in. Your set stays as it is.`;
-  if (mode === 'in-place') return `Swaps the emotes in this set for their ${season} versions, directly.`;
-  return `Swaps ${season} emotes in this set back to their normal versions, using the ${season} preset in reverse.`;
-}
-
 export function Replace() {
   const [params] = useSearchParams();
   const channel = params.get('channel') ?? '';
@@ -356,155 +350,128 @@ export function Replace() {
   return (
     <>
       <SiteHeader />
-      <main className={styles.main}>
-        <div className={styles.intro}>
-          <h1 className={styles.heading}>Duplicate or replace emotes</h1>
-          <p className={styles.lede}>
-            Pick a set, turn the knobs, check the swaps, press the orange key. Nothing changes on 7TV until you do.
-          </p>
+      <main className={`${styles.main} ${styles.replace}`}>
+        <h1 className={styles.heading}>Manage emote sets</h1>
+
+        <div className={styles.replaceSetup}>
+          <section className={styles.step} aria-labelledby="set-heading">
+            <h2 id="set-heading" className={styles.stepHeading}>Source set</h2>
+            <SetPicker
+              label="Channel name or 7TV set link"
+              selected={set}
+              onSelect={(next) => {
+                setSet(next);
+                setSetError(undefined);
+                setNewName(undefined);
+                if (runState.kind !== 'running') setRunState({ kind: 'idle' });
+              }}
+              initialQuery={channel}
+              error={setError}
+              inputRef={setInput}
+            />
+          </section>
+
+          <section className={`${styles.step} ${styles.replaceToken}`} aria-label="7TV access">
+            <div className={styles.tokenRow}>
+              <DeckField
+                label="7TV token"
+                type="password"
+                placeholder="Required to write changes"
+                value={token}
+                onChange={onToken}
+                error={tokenError}
+                inputRef={tokenInput}
+              />
+              {token && (
+                <GunmetalKey size="small" className={styles.tokenForget} onClick={() => onToken('')}>
+                  Forget token
+                </GunmetalKey>
+              )}
+            </div>
+            <p className={styles.stepLede}>
+              <Link to="/guide/token">Find your token</Link> · Stored in this browser
+            </p>
+          </section>
         </div>
 
-        <section className={styles.step} aria-labelledby="token-heading">
-          <h2 id="token-heading" className={styles.stepHeading}>
-            <span className={styles.stepNumber} aria-hidden="true">
-              1
-            </span>
-            Your 7TV token
-          </h2>
-          <p className={styles.stepLede}>
-            Replace changes your set with your own 7TV token. Not sure where it is?{' '}
-            <Link to="/guide/token">The token guide</Link> shows you in about a minute.
-          </p>
-          <div className={styles.tokenRow}>
-            <DeckField
-              label="7TV token"
-              type="password"
-              placeholder="paste it here"
-              value={token}
-              onChange={onToken}
-              error={tokenError}
-              hint="Kept in this browser and only ever sent to 7TV."
-              inputRef={tokenInput}
-            />
-            {token && (
-              <GunmetalKey size="small" className={styles.tokenForget} onClick={() => onToken('')}>
-                Forget token
-              </GunmetalKey>
+        <section className={styles.step} aria-labelledby="dial-heading">
+          <h2 id="dial-heading" className={styles.stepHeading}>Copy or swap options</h2>
+          <div className={styles.replaceSetup}>
+            <div className={styles.console}>
+              <Knob<SeasonId> compact label="Season" options={SEASON_OPTIONS} value={season} onChange={setSeason} />
+              <Knob<RunMode> compact label="Mode" options={MODE_OPTIONS} value={mode} onChange={setMode} />
+              {mode === 'revert' && (
+                <p className={styles.consoleNote}>Applies the {label} preset in reverse.</p>
+              )}
+            </div>
+
+            {mode === 'in-place' && (
+              <p className={styles.plate}>
+                <strong>This changes your set directly.</strong> Revert uses the {label} preset in reverse and may not
+                restore every emote exactly. Undo restores it exactly, but only from this browser.
+              </p>
+            )}
+
+            {mode === 'duplicate' && (
+              <div className={styles.target}>
+                <label className={styles.copyOnly}>
+                  <input
+                    type="checkbox"
+                    checked={copyOnly}
+                    disabled={running}
+                    onChange={(event) => {
+                      setSkipSwaps(event.target.checked);
+                      if (runState.kind !== 'idle') setRunState({ kind: 'idle' });
+                    }}
+                  />
+                  Copy only
+                </label>
+                {targetKind === 'new' ? (
+                  <>
+                    <DeckField
+                      label="Name of the new set"
+                      value={copyName}
+                      onChange={(value) => {
+                        setNewName(value);
+                        setTargetError(undefined);
+                      }}
+                      error={targetError}
+                      placeholder="e.g. Main (Halloween)"
+                    />
+                    <button type="button" className={styles.textButton} onClick={() => setTargetKind('existing')}>
+                      Fill an existing empty set instead
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <SetPicker
+                      label="Set to fill"
+                      selected={existingTarget}
+                      onSelect={(next) => {
+                        setExistingTarget(next);
+                        setTargetError(undefined);
+                      }}
+                      initialQuery={channel}
+                      error={targetError}
+                    />
+                    {existingTarget && existingTarget.emotes.length > 0 && (
+                      <p className={styles.note}>
+                        “{existingTarget.name}” already holds {plural(existingTarget.emotes.length, 'emote', 'emotes')}.
+                        7TV will refuse any that are already in it.
+                      </p>
+                    )}
+                    <button type="button" className={styles.textButton} onClick={() => setTargetKind('new')}>
+                      Make a new set instead
+                    </button>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </section>
 
-        <section className={styles.step} aria-labelledby="set-heading">
-          <h2 id="set-heading" className={styles.stepHeading}>
-            <span className={styles.stepNumber} aria-hidden="true">
-              2
-            </span>
-            The set to change
-          </h2>
-          <SetPicker
-            label="Channel name or 7TV set link"
-            selected={set}
-            onSelect={(next) => {
-              setSet(next);
-              setSetError(undefined);
-              setNewName(undefined);
-              if (runState.kind !== 'running') setRunState({ kind: 'idle' });
-            }}
-            initialQuery={channel}
-            error={setError}
-            inputRef={setInput}
-          />
-        </section>
-
-        <section className={styles.step} aria-labelledby="dial-heading">
-          <h2 id="dial-heading" className={styles.stepHeading}>
-            <span className={styles.stepNumber} aria-hidden="true">
-              3
-            </span>
-            Season and mode
-          </h2>
-          <div className={styles.console}>
-            <div className={styles.knob}>
-              <Knob<SeasonId> label="Season" options={SEASON_OPTIONS} value={season} onChange={setSeason} />
-            </div>
-            <div className={styles.knob}>
-              <Knob<RunMode> label="Mode" options={MODE_OPTIONS} value={mode} onChange={setMode} />
-            </div>
-            <p className={styles.consoleNote}>
-              <strong>{copyOnly ? 'Copy only' : MODE_NAMES[mode]}.</strong>{' '}
-              {copyOnly ? 'Copies the source emotes with their chat names.' : modeDescription(mode, label)}
-            </p>
-          </div>
-
-          {mode === 'in-place' && (
-            <p className={styles.plate}>
-              <strong>This changes your set directly.</strong> Revert uses the {label} preset in reverse and may not
-              restore every emote exactly. Undo restores it exactly, but only from this browser.
-            </p>
-          )}
-
-          {mode === 'duplicate' && (
-            <div className={styles.target}>
-              <label className={styles.copyOnly}>
-                <input
-                  type="checkbox"
-                  checked={copyOnly}
-                  disabled={running}
-                  onChange={(event) => {
-                    setSkipSwaps(event.target.checked);
-                    if (runState.kind !== 'idle') setRunState({ kind: 'idle' });
-                  }}
-                />
-                Copy only
-              </label>
-              {targetKind === 'new' ? (
-                <>
-                  <DeckField
-                    label="Name of the new set"
-                    value={copyName}
-                    onChange={(value) => {
-                      setNewName(value);
-                      setTargetError(undefined);
-                    }}
-                    error={targetError}
-                    placeholder="e.g. Main (Halloween)"
-                  />
-                  <button type="button" className={styles.textButton} onClick={() => setTargetKind('existing')}>
-                    Fill an existing empty set instead
-                  </button>
-                </>
-              ) : (
-                <>
-                  <SetPicker
-                    label="Set to fill"
-                    selected={existingTarget}
-                    onSelect={(next) => {
-                      setExistingTarget(next);
-                      setTargetError(undefined);
-                    }}
-                    initialQuery={channel}
-                    error={targetError}
-                  />
-                  {existingTarget && existingTarget.emotes.length > 0 && (
-                    <p className={styles.note}>
-                      “{existingTarget.name}” already holds {plural(existingTarget.emotes.length, 'emote', 'emotes')}.
-                      7TV will refuse any that are already in it.
-                    </p>
-                  )}
-                  <button type="button" className={styles.textButton} onClick={() => setTargetKind('new')}>
-                    Make a new set instead
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </section>
-
         <section className={styles.step} aria-labelledby="preview-heading">
           <h2 id="preview-heading" className={styles.stepHeading}>
-            <span className={styles.stepNumber} aria-hidden="true">
-              4
-            </span>
             {copyOnly ? 'Check the copy' : 'Check the swaps'}
           </h2>
           {!set && <p className={styles.stepLede}>Pick a set above to see every swap before anything changes.</p>}

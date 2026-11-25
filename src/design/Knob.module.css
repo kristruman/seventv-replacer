@@ -5,6 +5,50 @@
   user-select: none;
 }
 
+.compact {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+}
+
+.compact .detents {
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.compact .detent {
+  min-height: 40px;
+  padding: 6px 10px;
+  background: var(--gunmetal-deep);
+  font-size: 13px;
+  letter-spacing: normal;
+  text-transform: none;
+  opacity: 1;
+}
+
+.compact .detent[aria-checked='true'] {
+  color: var(--charcoal);
+  background: var(--bone);
+}
+
+.groupLabel {
+  color: var(--bone);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 680px) {
+  .compact {
+    width: 100%;
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .compact .detent {
+    padding-inline: 7px;
+  }
+}
+
 .dial {
   width: var(--knob-size, 150px);
   aspect-ratio: 1;

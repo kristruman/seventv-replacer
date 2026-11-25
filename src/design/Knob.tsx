@@ -11,6 +11,7 @@ interface KnobProps<T extends string> {
   options: KnobOption<T>[];
   value: T;
   onChange(value: T): void;
+  compact?: boolean;
 }
 
 const SWEEP = 120; // degrees between the first and last detent
@@ -24,7 +25,7 @@ function detentAngle(index: number, count: number): number {
  * arrow keys step one detent (no wrap), clicking a label jumps to it, and
  * dragging the knob face snaps to the nearest detent.
  */
-export function Knob<T extends string>({ label, options, value, onChange }: KnobProps<T>) {
+export function Knob<T extends string>({ label, options, value, onChange, compact = false }: KnobProps<T>) {
   const radios = useRef<Array<HTMLButtonElement | null>>([]);
   const dial = useRef<HTMLDivElement>(null);
   const current = Math.max(
@@ -64,19 +65,21 @@ export function Knob<T extends string>({ label, options, value, onChange }: Knob
   };
 
   return (
-    <div className={styles.knob} role="radiogroup" aria-label={label}>
-      <div
-        ref={dial}
-        className={styles.dial}
-        aria-hidden="true"
-        onPointerDown={onPointer}
-        onPointerMove={onPointer}
-        style={{ '--angle': `${detentAngle(current, options.length)}deg` } as CSSProperties}
-      >
-        <div className={styles.face}>
-          <span className={styles.pointer} />
+    <div className={compact ? styles.compact : styles.knob} role="radiogroup" aria-label={label}>
+      {compact ? <span className={styles.groupLabel} aria-hidden="true">{label}</span> : (
+        <div
+          ref={dial}
+          className={styles.dial}
+          aria-hidden="true"
+          onPointerDown={onPointer}
+          onPointerMove={onPointer}
+          style={{ '--angle': `${detentAngle(current, options.length)}deg` } as CSSProperties}
+        >
+          <div className={styles.face}>
+            <span className={styles.pointer} />
+          </div>
         </div>
-      </div>
+      )}
       <div className={styles.detents}>
         {options.map((option, index) => {
           const checked = index === current;

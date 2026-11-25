@@ -308,3 +308,117 @@
     min-height: 76px;
   }
 }
+
+.replace {
+  --deck-field-gap: 5px;
+  --deck-field-height: 44px;
+  --deck-field-padding: 12px;
+  --deck-field-border: 2px;
+  --deck-field-font-size: 16px;
+  --set-picker-gap: 8px;
+  --set-search-button-padding: 12px;
+  --set-search-columns-small: minmax(0, 1fr) auto;
+  --set-search-offset-small: 23px;
+  --set-chosen-padding: 8px 12px;
+  --set-chosen-font-size: 17px;
+  --screen-bezel-padding: 4px;
+  --screen-height: 36px;
+  --screen-padding: 10px;
+  --screen-font-size: 13px;
+  width: min(100%, 1160px);
+  margin-inline: auto;
+  gap: 22px;
+  padding: 12px clamp(16px, 3vw, 36px) 40px;
+  font-size: 15px;
+}
+
+.replace .heading {
+  font-size: clamp(1.65rem, 3vw, 2.25rem);
+  line-height: 1.12;
+  text-wrap: wrap;
+}
+
+.replace .step,
+.replace .target {
+  gap: 8px;
+}
+
+.replace .stepHeading {
+  font-size: 17px;
+}
+
+.replaceSetup {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px 24px;
+}
+
+.replace .tokenRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.replaceToken {
+  padding-top: 28px;
+}
+
+.replace .tokenForget {
+  margin-top: 23px;
+  height: 44px;
+}
+
+.replace .console {
+  justify-self: stretch;
+  justify-content: flex-start;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.replace .consoleNote {
+  flex-basis: 100%;
+  max-width: none;
+  font-size: 13px;
+}
+
+.replace .plate {
+  padding: 10px 12px;
+}
+
+.replace .runBar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 8px 10px 12px;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.replace .runKey {
+  width: auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.replace .runKey span {
+  font-size: 13px;
+}
+
+@media (max-width: 680px) {
+  .replace {
+    gap: 16px;
+  }
+
+  .replaceSetup {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .replaceToken {
+    padding-top: 0;
+  }
+}

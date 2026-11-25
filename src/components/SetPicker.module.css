@@ -1,20 +1,21 @@
 .picker {
   display: grid;
-  gap: 22px;
+  gap: var(--set-picker-gap, 22px);
 }
 
 .search {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  gap: var(--set-picker-gap, 14px);
   align-items: start;
   max-width: 40rem;
 }
 
 /* Level with the field: below its label (12px mono at 1.5 plus the 8px gap), as tall as the well. */
 .find {
-  margin-top: 26px;
-  height: 60px;
+  margin-top: calc(18px + var(--deck-field-gap, 8px));
+  height: var(--deck-field-height, 60px);
+  padding-inline: var(--set-search-button-padding, 22px);
 }
 
 .results {
@@ -102,7 +103,7 @@
   justify-content: space-between;
   gap: 14px 22px;
   max-width: 40rem;
-  padding: 16px 18px 16px 22px;
+  padding: var(--set-chosen-padding, 16px 18px 16px 22px);
   border-radius: 12px;
   background: var(--bone);
   color: var(--charcoal);
@@ -117,7 +118,7 @@
   margin: 0;
   font-weight: 800;
   font-stretch: 108%;
-  font-size: 20px;
+  font-size: var(--set-chosen-font-size, 20px);
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
@@ -130,10 +131,10 @@
 
 @media (max-width: 640px) {
   .search {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: var(--set-search-columns-small, minmax(0, 1fr));
   }
 
   .find {
-    margin-top: 0;
+    margin-top: var(--set-search-offset-small, 0);
   }
 }
