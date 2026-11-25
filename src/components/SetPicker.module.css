@@ -23,6 +23,23 @@
   gap: 12px;
 }
 
+.resultsHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.backToSets {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .resultsHeading {
   margin: 0;
   font-family: var(--font-mono);

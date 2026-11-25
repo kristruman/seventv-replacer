@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { json, mockFetch, renderAt } from '../test/render';
-import { emoteId, SET_ID, sevenTvRead, type Mutation } from '../test/seventv-mock';
+import { emoteId, SEASONAL_ID, SET_ID, sevenTvRead, type Mutation } from '../test/seventv-mock';
 
 const A = emoteId(1, 'A');
 const B = emoteId(2, 'B');
@@ -40,6 +40,77 @@ describe('Replace', () => {
     expect(screen.getByRole('radio', { name: 'Winter' })).toBeChecked();
     expect(await screen.findByRole('button', { name: /Main/ })).toBeInTheDocument();
     expect(screen.getByText('niena’s sets on 7TV')).toBeInTheDocument();
+  });
+
+  it('automatically lists the saved token account’s sets with its active set first', async () => {
+    localStorage.setItem('ser.7tv-token', 'saved-token');
+    const read = sevenTvRead(sets, (change) => void mutations.push(change));
+    const mock = mockFetch({
+      ...read,
+      'https://7tv.io/v4/gql': (url, init) => {
+        if (!JSON.parse(String(init?.body)).query?.includes('MyEmoteSets')) return read['https://7tv.io/v4/gql'](url, init);
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer saved-token');
+        return json({ data: { users: { me: {
+          ownedEmoteSets: [
+            { id: SEASONAL_ID, name: 'Winter', kind: 'NORMAL' },
+            { id: SET_ID, name: 'Main', kind: 'NORMAL' },
+            { id: 'P', name: 'Personal', kind: 'PERSONAL' },
+          ],
+          style: { activeEmoteSet: { id: SET_ID, name: 'Main', kind: 'NORMAL' } },
+        } } } });
+      },
+      '/api/presets/': () => preset('winter'),
+    });
+    renderAt('/replace?season=winter');
+    const list = await screen.findByRole('list', { name: 'Your 7TV sets' });
+    const choices = within(list).getAllByRole('button');
+    expect(choices).toHaveLength(2);
+    expect(choices[0]).toHaveTextContent(/Main\s*active/i);
+    expect(choices[1]).toHaveTextContent('Winter');
+    expect(mock.mock.calls.some(([url]) => String(url).includes('api.ivr.fi'))).toBe(false);
+    await userEvent.click(choices[0]!);
+    await screen.findByRole('list', { name: 'Swaps' });
+    expect(mutations).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Change' }));
+    expect(screen.getByRole('list', { name: 'Your 7TV sets' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Forget token' }));
+    expect(screen.queryByRole('list', { name: 'Your 7TV sets' })).not.toBeInTheDocument();
+  });
+
+  it('loads account sets after a token is pasted, including a set owned by someone else that is active', async () => {
+    const requests: string[] = [];
+    mockFetch({
+      'https://7tv.io/v4/gql': (_url, init) => {
+        requests.push(new Headers(init?.headers).get('Authorization') ?? '');
+        return json({ data: { users: { me: {
+          ownedEmoteSets: [],
+          style: { activeEmoteSet: { id: SET_ID, name: 'Editor set', kind: 'NORMAL' } },
+        } } } });
+      },
+      '/api/presets/': () => preset('winter'),
+    });
+    renderAt('/replace?season=winter');
+    await userEvent.click(screen.getByLabelText('7TV token', { exact: true }));
+    await userEvent.paste('Bearer pasted-token');
+    const list = await screen.findByRole('list', { name: 'Your 7TV sets' });
+    expect(within(list).getByRole('button', { name: 'Editor set, active' })).toBeInTheDocument();
+    expect(requests).toEqual(['Bearer pasted-token']);
+  });
+
+  it('shows a token error and still loads a pasted public set link', async () => {
+    localStorage.setItem('ser.7tv-token', 'expired');
+    mockFetch({
+      ...sevenTvRead(sets),
+      'https://7tv.io/v4/gql': () => json({ error: 'invalid session', error_code: 1000 }, 401),
+      '/api/presets/': () => preset('winter'),
+    });
+    renderAt('/replace?season=winter');
+    expect(await screen.findByText(/paste a fresh token/i)).toBeInTheDocument();
+    const setInput = screen.getByLabelText('Channel name or 7TV set link');
+    await userEvent.click(setInput);
+    await userEvent.paste(`https://7tv.app/emote-sets/${SET_ID}`);
+    await userEvent.click(screen.getByRole('button', { name: 'Find' }));
+    expect(await screen.findByRole('list', { name: 'Swaps' })).toBeInTheDocument();
   });
 
   it('previews every swap, all ticked, and sums up emotes without a seasonal version', async () => {

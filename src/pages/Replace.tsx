@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useSearchParams } from 'react-router';
 import { currentSeason, isSeasonId, SEASONS, seasonLabel, type SeasonId } from '@shared/seasons';
-import { fetchEmoteSet, seventvSetUrl, type EmoteSet } from '@shared/seventv';
+import { fetchEmoteSet, fetchMySets, SevenTvError, seventvSetUrl, type EmoteSet, type SetSummary } from '@shared/seventv';
 import type { MappingRow } from '@shared/types';
 import { fetchPreset, reportBroken } from '../api';
 import { ProblemList } from '../components/ProblemList';
@@ -53,6 +53,7 @@ const MODE_NAMES: Record<RunMode, string> = {
 };
 
 type Loaded<T> = T | 'loading' | 'failed';
+type AccountSets = { token: string } & ({ sets: SetSummary[] } | { error: string; retryable: boolean });
 
 type RunState =
   | { kind: 'idle' }
@@ -85,6 +86,8 @@ export function Replace() {
   const [token, setToken] = useState(loadToken);
   const [tokenError, setTokenError] = useState<string>();
   const tokenInput = useRef<HTMLInputElement>(null);
+  const [accountResult, setAccountResult] = useState<AccountSets>();
+  const [accountAttempt, setAccountAttempt] = useState(0);
 
   const [set, setSet] = useState<EmoteSet | null>(null);
   const [setError, setSetError] = useState<string>();
@@ -122,6 +125,34 @@ export function Replace() {
   const running = runState.kind === 'running';
   const preset = presets[season];
   const copyOnly = mode === 'duplicate' && skipSwaps;
+  const account = accountResult?.token === token ? accountResult : undefined;
+  const mySets = token && account && 'sets' in account ? account.sets : undefined;
+
+  useEffect(() => {
+    if (!token) return;
+    const controller = new AbortController();
+    // Wait for a paste or edit to settle before querying with the token.
+    const timer = window.setTimeout(() => {
+      void fetchMySets(token, controller.signal).then(
+        (sets) => {
+          if (!controller.signal.aborted) setAccountResult({ token, sets });
+        },
+        (error) => {
+          if (!controller.signal.aborted) {
+            setAccountResult({
+              token,
+              error: errorText(error),
+              retryable: !(error instanceof SevenTvError && error.kind === 'no-account'),
+            });
+          }
+        },
+      );
+    }, 350);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [token, accountAttempt]);
 
   useEffect(() => {
     if (copyOnly || preset !== undefined) return;
@@ -185,6 +216,7 @@ export function Replace() {
 
   const onToken = (value: string) => {
     const clean = cleanToken(value);
+    if (clean !== token) setAccountResult(undefined);
     setToken(clean);
     saveToken(clean);
     setTokenError(undefined);
@@ -366,6 +398,7 @@ export function Replace() {
                 if (runState.kind !== 'running') setRunState({ kind: 'idle' });
               }}
               initialQuery={channel}
+              mySets={mySets}
               error={setError}
               inputRef={setInput}
             />
@@ -376,7 +409,7 @@ export function Replace() {
               <DeckField
                 label="7TV token"
                 type="password"
-                placeholder="Required to write changes"
+                placeholder="Paste your 7TV token"
                 value={token}
                 onChange={onToken}
                 error={tokenError}
@@ -391,6 +424,29 @@ export function Replace() {
             <p className={styles.stepLede}>
               <Link to="/guide/token">Find your token</Link> · Stored in this browser
             </p>
+            {token && (
+              <div className={styles.stepLede} aria-live="polite">
+                {!account && 'Loading your 7TV sets…'}
+                {account && 'error' in account && (
+                  <>
+                    {account.error}{' '}
+                    {account.retryable && (
+                      <button
+                        type="button"
+                        className={styles.textButton}
+                        onClick={() => {
+                          setAccountResult(undefined);
+                          setAccountAttempt((attempt) => attempt + 1);
+                        }}
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </>
+                )}
+                {mySets?.length === 0 && 'Your 7TV account has no channel emote sets yet.'}
+              </div>
+            )}
           </section>
         </div>
 
@@ -452,6 +508,7 @@ export function Replace() {
                         setTargetError(undefined);
                       }}
                       initialQuery={channel}
+                      mySets={mySets}
                       error={targetError}
                     />
                     {existingTarget && existingTarget.emotes.length > 0 && (

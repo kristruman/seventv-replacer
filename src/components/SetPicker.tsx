@@ -27,6 +27,7 @@ interface SetPickerProps {
   initialQuery?: string;
   /** Set by the page, e.g. "Pick a set first." */
   error?: string;
+  mySets?: SetSummary[];
   inputRef?: Ref<HTMLInputElement>;
 }
 
@@ -36,7 +37,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : 'S
  * Finds a 7TV set by channel name (listing that channel's sets) or by a pasted
  * set link. One field takes either, so the two can be mixed freely.
  */
-export function SetPicker({ label, selected, onSelect, initialQuery = '', error, inputRef }: SetPickerProps) {
+export function SetPicker({ label, selected, onSelect, initialQuery = '', error, mySets, inputRef }: SetPickerProps) {
   const [query, setQuery] = useState(initialQuery);
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const [problem, setProblem] = useState<string>();
@@ -118,6 +119,7 @@ export function SetPicker({ label, selected, onSelect, initialQuery = '', error,
     phase.kind === 'list' || (phase.kind === 'loading' && phase.channel && phase.sets)
       ? { channel: phase.channel!, sets: phase.sets! }
       : null;
+  const choices = list?.sets ?? mySets;
 
   return (
     <div className={styles.picker}>
@@ -138,19 +140,36 @@ export function SetPicker({ label, selected, onSelect, initialQuery = '', error,
         </GunmetalKey>
       </form>
 
-      {list && (
+      {choices && choices.length > 0 && (
         <div className={styles.results}>
-          <p className={styles.resultsHeading}>{list.channel}’s sets on 7TV</p>
-          <ul className={styles.sets}>
-            {list.sets.map((set) => {
+          <div className={styles.resultsHeader}>
+            <p className={styles.resultsHeading}>{list ? `${list.channel}’s sets on 7TV` : 'Your 7TV sets'}</p>
+            {list && Boolean(mySets?.length) && (
+              <button
+                type="button"
+                className={styles.backToSets}
+                onClick={() => {
+                  latest.current++;
+                  setQuery('');
+                  setPhase({ kind: 'idle' });
+                  setProblem(undefined);
+                }}
+              >
+                Show your sets
+              </button>
+            )}
+          </div>
+          <ul className={styles.sets} aria-label={list ? `${list.channel}’s sets` : 'Your 7TV sets'}>
+            {choices.map((set) => {
               const loading = phase.kind === 'loading' && phase.id === set.id;
               return (
                 <li key={set.id}>
                   <button
                     type="button"
                     className={styles.set}
+                    aria-label={set.active ? `${set.name}, active` : undefined}
                     aria-busy={loading || undefined}
-                    onClick={() => void load(set.id, list)}
+                    onClick={() => void load(set.id, list ?? undefined)}
                   >
                     <span className={styles.lamp} data-on={set.active || undefined} aria-hidden="true" />
                     <span className={styles.setName}>{set.name}</span>

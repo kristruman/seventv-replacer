@@ -1,6 +1,6 @@
 /**
  * Read-only 7TV access, shared by the browser (Replace, the set picker) and
- * the Worker (Compare fetches both sets itself). Nothing here needs a token.
+ * the Worker (Compare fetches both sets itself).
  */
 import type { SeasonId } from './seasons';
 
@@ -136,6 +136,49 @@ interface GqlBody<T> {
   errors?: Array<{ message: string }>;
 }
 
+type SetListing = Pick<SetSummary, 'id' | 'name'> & { kind?: string };
+
+function listSets(owned: SetListing[], active?: SetListing | null): SetSummary[] {
+  const normal = owned.filter((set) => set.kind?.toUpperCase() !== 'PERSONAL');
+  const activeSet = active && active.kind?.toUpperCase() !== 'PERSONAL'
+    ? normal.find((set) => set.id === active.id) ?? active
+    : null;
+  const inactive = normal
+    .filter((set) => set.id !== activeSet?.id)
+    .map(({ id, name }) => ({ id, name, active: false }));
+  return activeSet ? [{ id: activeSet.id, name: activeSet.name, active: true }, ...inactive] : inactive;
+}
+
+/** Account lookup runs in the browser. The bearer token goes directly to 7TV. */
+export async function fetchMySets(token: string, signal: AbortSignal, fetchFn: Fetch = fetch): Promise<SetSummary[]> {
+  const query = `query MyEmoteSets {
+    users {
+      me {
+        ownedEmoteSets { id name kind }
+        style { activeEmoteSet { id name kind } }
+      }
+    }
+  }`;
+  const { status, body } = await readJson(fetchFn, `${SEVENTV_API}/v4/gql`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    redirect: 'error',
+    cache: 'no-store',
+    body: JSON.stringify({ query }),
+    signal,
+  });
+  type Me = { ownedEmoteSets: SetListing[]; style: { activeEmoteSet: SetListing | null } };
+  const result = body as (GqlBody<{ users: { me: Me | null } }> & { error_code?: number }) | null;
+  const me = result?.data?.users?.me;
+  if (status === 401 || status === 403 || result?.error_code === 1000 || me === null) {
+    throw new SevenTvError('7TV couldn’t sign you in. Paste a fresh token from 7tv.app.', 'no-account');
+  }
+  if (status !== 200 || result?.errors?.length || !Array.isArray(me?.ownedEmoteSets)) {
+    throw new SevenTvError('Couldn’t load your 7TV sets. Try again or paste a set link.', 'unavailable');
+  }
+  return listSets(me.ownedEmoteSets, me.style?.activeEmoteSet);
+}
+
 export interface SeasonalCandidate {
   id: string;
   defaultName: string;
@@ -191,7 +234,7 @@ export async function fetchChannelSets(login: string, fetchFn: Fetch = fetch): P
     body: JSON.stringify({ query }),
   });
   type UserData = {
-    users?: { userByConnection?: { id: string; ownedEmoteSets?: Array<{ id: string; name: string; kind?: string }> } | null };
+    users?: { userByConnection?: { id: string; ownedEmoteSets?: SetListing[] } | null };
   };
   const result = gql.body as GqlBody<UserData> | null;
   if (gql.status !== 200 || !result || result.errors?.length) {
@@ -200,22 +243,13 @@ export async function fetchChannelSets(login: string, fetchFn: Fetch = fetch): P
   const user = result.data?.users?.userByConnection;
   if (!user) throw new SevenTvError(`${channel} doesn’t have a 7TV account yet.`, 'no-account');
 
-  const sets: SetSummary[] = (user.ownedEmoteSets ?? [])
-    .filter((s) => s.kind?.toUpperCase() !== 'PERSONAL')
-    .map((s) => ({ id: s.id, name: s.name, active: false }));
-
   // The active set is optional detail: if 7TV won't say, the list still works.
   const v3 = await readJson(fetchFn, `${SEVENTV_API}/v3/users/${encodeURIComponent(user.id)}`).catch(() => null);
   type V3User = { connections?: Array<{ platform?: string; emote_set_id?: string; emote_set?: { id: string; name: string } }> };
   const twitchConnection = (v3?.body as V3User | null)?.connections?.find((c) => c.platform === 'TWITCH');
   const activeId = twitchConnection?.emote_set_id ?? twitchConnection?.emote_set?.id;
-  if (activeId) {
-    const owned = sets.find((s) => s.id === activeId);
-    if (owned) owned.active = true;
-    // An editor-built set the channel uses but doesn't own.
-    else sets.push({ id: activeId, name: twitchConnection?.emote_set?.name ?? 'Active set', active: true });
-  }
-  sets.sort((a, b) => Number(b.active) - Number(a.active));
+  const active = activeId ? { id: activeId, name: twitchConnection?.emote_set?.name ?? 'Active set' } : null;
+  const sets = listSets(user.ownedEmoteSets ?? [], active);
   return { channel, sets };
 }
 
